@@ -1,5 +1,9 @@
 package co.bolo.app.ui.session
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,14 +24,18 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.bolo.app.ui.components.BreathingRedDot
@@ -44,15 +52,42 @@ fun SessionScreen(
     vm: SessionViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        vm.onPermissionResult(results.values.all { it })
+    }
+
+    LaunchedEffect(Unit) {
+        val allGranted = permissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PermissionChecker.PERMISSION_GRANTED
+        }
+        vm.onPermissionResult(allGranted)
+    }
+
     when (state.phase) {
-        SessionUiState.Phase.PickingTopic -> TopicPicker(state, vm, onCancel)
+        SessionUiState.Phase.PickingTopic -> TopicPicker(state, vm, onCancel) {
+            launcher.launch(permissions.toTypedArray())
+        }
         SessionUiState.Phase.Running, SessionUiState.Phase.Ending -> Recording(state, vm, onEnd)
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TopicPicker(state: SessionUiState, vm: SessionViewModel, onCancel: () -> Unit) {
+private fun TopicPicker(
+    state: SessionUiState,
+    vm: SessionViewModel,
+    onCancel: () -> Unit,
+    onRequestPermission: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -120,12 +155,18 @@ private fun TopicPicker(state: SessionUiState, vm: SessionViewModel, onCancel: (
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
                 .background(if (canStart) BoloPalette.Ink else BoloPalette.SurfaceMuted)
-                .clickable(enabled = canStart) { vm.start() }
+                .clickable(enabled = canStart) {
+                    if (state.isPermissionGranted) {
+                        vm.start()
+                    } else {
+                        onRequestPermission()
+                    }
+                }
                 .padding(vertical = 18.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                "Start listening",
+                if (state.isPermissionGranted) "Start listening" else "Grant Mic Permission",
                 color = if (canStart) BoloPalette.Bg else BoloPalette.InkFaint,
                 style = MaterialTheme.typography.titleMedium
             )
@@ -144,7 +185,8 @@ private fun TopicPicker(state: SessionUiState, vm: SessionViewModel, onCancel: (
 @Composable
 private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    val currentSpeaker = state.students.getOrNull(state.currentSpeakerIdx)?.displayName ?: "—"
+    // For MVP without diarization, we don't display "Now Speaking" reliably
+    val currentSpeaker = if (state.students.size > 1) "Group Session" else state.students.firstOrNull()?.displayName ?: "—"
 
     Column(
         modifier = Modifier
@@ -175,7 +217,7 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
                     color = BoloPalette.Ink
                 )
                 Text(
-                    "${(state.englishShareRolling * 100).toInt()}% English now",
+                    "${(state.englishShareRolling * 100).toInt()}% English usage",
                     style = MaterialTheme.typography.labelMedium,
                     color = BoloPalette.SageDeep
                 )
@@ -183,19 +225,15 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
         }
 
         Spacer(Modifier.height(32.dp))
-        Text("NOW SPEAKING", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
+        Text("PARTICIPANTS", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
         Spacer(Modifier.height(6.dp))
-        Text(currentSpeaker, style = MaterialTheme.typography.headlineMedium, color = BoloPalette.Ink)
-        if (state.drifting) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Group has drifted — try a quick English question.",
-                style = MaterialTheme.typography.bodySmall,
-                color = BoloPalette.Amber
-            )
-        }
+        Text(currentSpeaker, style = MaterialTheme.typography.headlineSmall, color = BoloPalette.Ink)
 
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.weight(1f))
+        
+        // Show a snippet of the transcript internally if needed for debugging or transparency
+        // For MVP, we'll keep it hidden as per requirements, but the state is there.
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -214,7 +252,7 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "No audio is being saved. Only speaking time per voice.",
+            "Only the English percentage is saved.",
             style = MaterialTheme.typography.bodySmall,
             color = BoloPalette.InkFaint
         )

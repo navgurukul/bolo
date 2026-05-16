@@ -9,7 +9,7 @@ import co.bolo.app.data.model.Student
 
 @Database(
     entities = [Cohort::class, Student::class, Session::class, SpeakerStat::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class BoloDatabase : RoomDatabase() {

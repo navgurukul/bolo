@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,7 +28,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.bolo.app.ui.components.Hairline
 import co.bolo.app.ui.components.StaticEnglishHalo
-import co.bolo.app.ui.components.StudentBar
 import co.bolo.app.ui.theme.AccentItalic
 import co.bolo.app.ui.theme.BoloPalette
 import co.bolo.app.util.Format
@@ -82,7 +80,7 @@ fun SummaryScreen(
                         color = BoloPalette.Ink
                     )
                     Text(
-                        "English, by speaking time",
+                        "English Usage",
                         style = MaterialTheme.typography.labelMedium,
                         color = BoloPalette.InkFaint
                     )
@@ -90,9 +88,8 @@ fun SummaryScreen(
             }
             Spacer(Modifier.height(10.dp))
             val total = session?.totalSpeechMs ?: 0L
-            val english = session?.englishSpeechMs ?: 0L
             Text(
-                "${Format.minutes(english)} in English of ${Format.minutes(total)} spoken",
+                "Analyzed ${session?.chunksProcessed ?: 0} speech chunks over ${Format.minutes(total)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = BoloPalette.InkMuted,
                 textAlign = TextAlign.Center,
@@ -100,57 +97,18 @@ fun SummaryScreen(
             )
         }
 
-        state.topSpeaker?.let { top ->
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(BoloPalette.SageSoft)
-                        .padding(horizontal = 18.dp, vertical = 16.dp)
-                ) {
-                    Column {
-                        Text(
-                            "MOST ENGLISH TODAY",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = BoloPalette.SageDeep
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "${top.student.displayName} — nice work.",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = BoloPalette.SageDeep
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            "${Format.percent(top.stat.englishShare)} English across ${Format.minutes(top.stat.speechMs)} of speaking.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = BoloPalette.SageDeep
-                        )
-                    }
-                }
-            }
-        }
-
         item {
             Hairline()
             Spacer(Modifier.height(4.dp))
-            Text("PER STUDENT", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
-        }
-
-        items(state.rows, key = { it.student.id }) { row ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpenStudent(row.student.id) }
-            ) {
-                StudentBar(
-                    name = row.student.displayName,
-                    share = row.stat.englishShare,
-                    speechMs = row.stat.speechMs,
-                    isTop = row.student.id == state.topSpeaker?.student?.id
-                )
-            }
+            Text("PARTICIPANTS", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
+            Spacer(Modifier.height(8.dp))
+            // Show list of names even if per-student stats are 0 for MVP
+            val names = state.rows.joinToString(", ") { it.student.displayName }
+            Text(
+                names.ifBlank { "Group Session" },
+                style = MaterialTheme.typography.bodyLarge,
+                color = BoloPalette.Ink
+            )
         }
 
         item {
@@ -191,7 +149,7 @@ fun SummaryScreen(
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                "Saved: speaking time per voice. Never the audio.",
+                "The conversation transcript has been saved locally for internal analysis.",
                 style = MaterialTheme.typography.bodySmall,
                 color = BoloPalette.InkFaint,
                 textAlign = TextAlign.Center,

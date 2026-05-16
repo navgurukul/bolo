@@ -1,5 +1,7 @@
 package co.bolo.app.ui.session
 
+import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,9 +9,11 @@ import co.bolo.app.data.model.Session
 import co.bolo.app.data.model.SpeakerStat
 import co.bolo.app.data.model.Student
 import co.bolo.app.data.repo.CohortRepo
+import co.bolo.app.data.repo.SessionManager
 import co.bolo.app.data.repo.SessionRepo
+import co.bolo.app.service.SessionService
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CoroutineScope
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,8 +23,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
-import kotlin.math.roundToLong
-import kotlin.random.Random
 
 data class SessionUiState(
     val cohortId: String = "",
@@ -29,15 +31,15 @@ data class SessionUiState(
     val topic: String = "",
     val customTopic: String = "",
     val elapsedMs: Long = 0L,
-    val currentSpeakerIdx: Int = 0,
-    val englishShareRolling: Float = 0.55f,
+    val englishShareRolling: Float = 0f,
     val drifting: Boolean = false,
-    val perStudentSpeechMs: Map<String, Long> = emptyMap(),
-    val perStudentEnglishMs: Map<String, Long> = emptyMap(),
     val totalSpeechMs: Long = 0L,
     val totalEnglishMs: Long = 0L,
     val participantCount: Int = 0,
-    val setupNames: List<String> = emptyList()
+    val setupNames: List<String> = emptyList(),
+    val isPermissionGranted: Boolean = false,
+    val transcript: String = "",
+    val chunksProcessed: Int = 0
 ) {
     enum class Phase { PickingTopic, Running, Ending }
 }
@@ -48,6 +50,8 @@ val SUGGESTED_TOPICS = listOf("Daily life", "Mock interview", "News chat", "Tech
 class SessionViewModel @Inject constructor(
     private val cohortRepo: CohortRepo,
     private val sessionRepo: SessionRepo,
+    private val sessionManager: SessionManager,
+    @ApplicationContext private val context: Context,
     savedState: SavedStateHandle
 ) : ViewModel() {
 
@@ -56,25 +60,49 @@ class SessionViewModel @Inject constructor(
     val state: StateFlow<SessionUiState> = _state.asStateFlow()
     private var sessionId: String? = null
     private var startedAt: Long = 0L
-    private var loop: Job? = null
-    private val rng = Random(System.currentTimeMillis())
+    private var timerJob: Job? = null
     private var isManualSetup = false
 
     init {
         viewModelScope.launch {
             cohortRepo.observeStudents(cohortId).collect { list ->
-                if (!isManualSetup) {
+                if (!isManualSetup && list.isNotEmpty()) {
                     _state.value = _state.value.copy(students = list)
                 }
             }
         }
+        
+        viewModelScope.launch {
+            sessionManager.englishPercentage.collect { percentage ->
+                _state.value = _state.value.copy(
+                    englishShareRolling = percentage,
+                    totalEnglishMs = (_state.value.totalSpeechMs * percentage).toLong()
+                )
+            }
+        }
+
+        viewModelScope.launch {
+            sessionManager.transcript.collect { text ->
+                _state.value = _state.value.copy(transcript = text)
+            }
+        }
+
+        viewModelScope.launch {
+            sessionManager.chunksProcessed.collect { count ->
+                _state.value = _state.value.copy(chunksProcessed = count)
+            }
+        }
+    }
+
+    fun onPermissionResult(granted: Boolean) {
+        _state.value = _state.value.copy(isPermissionGranted = granted)
     }
 
     fun setParticipantCount(count: Int) {
         isManualSetup = true
         _state.value = _state.value.copy(
             participantCount = count,
-            setupNames = List(count) { "Participant ${it + 1}" }
+            setupNames = List(count) { "" }
         )
     }
 
@@ -91,7 +119,12 @@ class SessionViewModel @Inject constructor(
         if (names.isNotEmpty()) {
             _state.value = _state.value.copy(
                 students = names.mapIndexed { i, name ->
-                    Student(id = "temp-$i-${UUID.randomUUID()}", cohortId = cohortId, displayName = name)
+                    val displayName = name.ifBlank { "Participant ${i + 1}" }
+                    Student(
+                        id = "student-${UUID.randomUUID()}", 
+                        cohortId = cohortId, 
+                        displayName = displayName
+                    )
                 }
             )
         }
@@ -111,49 +144,43 @@ class SessionViewModel @Inject constructor(
             topic = topic,
             elapsedMs = 0L
         )
-        loop = viewModelScope.launch { tick() }
+        
+        val intent = Intent(context, SessionService::class.java)
+        context.startForegroundService(intent)
+        
+        startTimer()
     }
 
-    private suspend fun CoroutineScope.tick() {
-        val tickMs = 250L
-        while (isActive && _state.value.phase == SessionUiState.Phase.Running) {
-            delay(tickMs)
-            val s = _state.value
-            // Phase 0: simulate. Phase 1+ replaces this loop with real VAD/classifier output.
-            val students = s.students
-            if (students.isEmpty()) continue
-
-            val speakerIdx = if (rng.nextFloat() < 0.04f) {
-                (s.currentSpeakerIdx + 1 + rng.nextInt(students.size)) % students.size
-            } else s.currentSpeakerIdx
-
-            val englishProb = (s.englishShareRolling + (rng.nextFloat() - 0.5f) * 0.12f).coerceIn(0.05f, 0.95f)
-            val drift = englishProb < 0.35f && rng.nextFloat() < 0.3f
-
-            val speechDelta = tickMs
-            val englishDelta = (speechDelta * englishProb).roundToLong()
-            val sid = students[speakerIdx].id
-
-            _state.value = s.copy(
-                currentSpeakerIdx = speakerIdx,
-                englishShareRolling = englishProb,
-                drifting = drift,
-                elapsedMs = s.elapsedMs + tickMs,
-                totalSpeechMs = s.totalSpeechMs + speechDelta,
-                totalEnglishMs = s.totalEnglishMs + englishDelta,
-                perStudentSpeechMs = s.perStudentSpeechMs + (sid to ((s.perStudentSpeechMs[sid] ?: 0L) + speechDelta)),
-                perStudentEnglishMs = s.perStudentEnglishMs + (sid to ((s.perStudentEnglishMs[sid] ?: 0L) + englishDelta))
-            )
+    private fun startTimer() {
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch {
+            while (isActive) {
+                delay(1000)
+                _state.value = _state.value.copy(
+                    elapsedMs = _state.value.elapsedMs + 1000,
+                    totalSpeechMs = _state.value.totalSpeechMs + 1000
+                )
+            }
         }
     }
 
-    /** Returns the persisted session id so navigation can route to summary. */
     suspend fun end(): String {
-        loop?.cancel()
+        timerJob?.cancel()
+        
+        val intent = Intent(context, SessionService::class.java)
+        context.stopService(intent)
+
         _state.value = _state.value.copy(phase = SessionUiState.Phase.Ending)
         val s = _state.value
         val id = sessionId ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
+
+        // 1. Save any new students created during manual setup
+        s.students.forEach { student ->
+            cohortRepo.upsertStudent(student)
+        }
+        
+        // 2. Persist the session with internal analysis data
         sessionRepo.upsertSession(
             Session(
                 id = id,
@@ -162,19 +189,24 @@ class SessionViewModel @Inject constructor(
                 startedAt = startedAt.takeIf { it > 0 } ?: now,
                 endedAt = now,
                 totalSpeechMs = s.totalSpeechMs,
-                englishSpeechMs = s.totalEnglishMs
+                englishSpeechMs = s.totalEnglishMs,
+                transcript = s.transcript,
+                chunksProcessed = s.chunksProcessed
             )
         )
+        
+        // 3. Link students to session
         val stats = s.students.map { stu ->
             SpeakerStat(
                 id = "stat-$id-${stu.id}",
                 sessionId = id,
                 studentId = stu.id,
-                speechMs = s.perStudentSpeechMs[stu.id] ?: 0L,
-                englishMs = s.perStudentEnglishMs[stu.id] ?: 0L
+                speechMs = 0, 
+                englishMs = 0
             )
         }
         sessionRepo.upsertStats(stats)
+
         return id
     }
 }

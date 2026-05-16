@@ -17,4 +17,5 @@ class CohortRepo @Inject constructor(
     suspend fun cohort(id: String): Cohort? = cohortDao.byId(id)
     fun observeStudents(cohortId: String): Flow<List<Student>> = studentDao.observeByCohort(cohortId)
     suspend fun student(id: String): Student? = studentDao.byId(id)
+    suspend fun upsertStudent(student: Student) = studentDao.upsert(student)
 }

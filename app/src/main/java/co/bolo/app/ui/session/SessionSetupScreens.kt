@@ -112,11 +112,11 @@ fun ParticipantCountScreen(
                 .background(BoloPalette.Ink)
                 .clickable {
                     val count = countText.toIntOrNull()
-                    if (count != null && count in 3..10) {
+                    if (count != null && count in 2..10) {
                         vm.setParticipantCount(count)
                         onNext(count)
                     } else {
-                        errorMessage = "Please enter a number between 3 and 10"
+                        errorMessage = "Please enter a number between 2 and 10"
                     }
                 }
                 .padding(vertical = 18.dp),
@@ -183,6 +183,7 @@ fun NameEditingScreen(
                         OutlinedTextField(
                             value = name,
                             onValueChange = { vm.updateSetupName(index, it) },
+                            placeholder = { Text("Name of participant ${index + 1}") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
