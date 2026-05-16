@@ -25,7 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.SolidColor
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,7 +39,6 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SessionScreen(
-    cohortId: String,
     onEnd: (sessionId: String) -> Unit,
     onCancel: () -> Unit,
     vm: SessionViewModel = hiltViewModel()

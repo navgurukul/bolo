@@ -3,6 +3,7 @@ package co.bolo.app.ui.nav
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -12,18 +13,26 @@ import androidx.navigation.navArgument
 import co.bolo.app.ui.dashboard.DashboardScreen
 import co.bolo.app.ui.enrollment.EnrollmentScreen
 import co.bolo.app.ui.home.HomeScreen
+import co.bolo.app.ui.session.NameEditingScreen
+import co.bolo.app.ui.session.ParticipantCountScreen
 import co.bolo.app.ui.session.SessionScreen
+import co.bolo.app.ui.session.SessionViewModel
 import co.bolo.app.ui.summary.SummaryScreen
 import co.bolo.app.ui.theme.BoloPalette
+import androidx.hilt.navigation.compose.hiltViewModel
 
 object Routes {
     const val HOME = "home"
     const val ENROLL = "enroll/{cohortId}/{studentId}"
+    const val SETUP_COUNT = "setup/count/{cohortId}"
+    const val SETUP_NAMES = "setup/names/{cohortId}"
     const val SESSION = "session/{cohortId}"
     const val SUMMARY = "summary/{sessionId}"
     const val DASHBOARD = "dashboard/{studentId}"
 
     fun enroll(cohortId: String, studentId: String) = "enroll/$cohortId/$studentId"
+    fun setupCount(cohortId: String) = "setup/count/$cohortId"
+    fun setupNames(cohortId: String) = "setup/names/$cohortId"
     fun session(cohortId: String) = "session/$cohortId"
     fun summary(sessionId: String) = "summary/$sessionId"
     fun dashboard(studentId: String) = "dashboard/$studentId"
@@ -44,7 +53,7 @@ fun BoloNavHost() {
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
-                    onStartSession = { cohortId -> nav.navigate(Routes.session(cohortId)) },
+                    onStartSession = { cohortId -> nav.navigate(Routes.setupCount(cohortId)) },
                     onOpenDashboard = { studentId -> nav.navigate(Routes.dashboard(studentId)) },
                     onEnroll = { cohortId, studentId -> nav.navigate(Routes.enroll(cohortId, studentId)) },
                     onOpenSession = { sessionId -> nav.navigate(Routes.summary(sessionId)) }
@@ -65,11 +74,39 @@ fun BoloNavHost() {
                 )
             }
             composable(
+                route = Routes.SETUP_COUNT,
+                arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
+            ) { entry ->
+                val parentEntry = remember(entry) { nav.getBackStackEntry(Routes.SETUP_COUNT) }
+                val vm: SessionViewModel = hiltViewModel(parentEntry)
+                ParticipantCountScreen(
+                    vm = vm,
+                    onNext = { count -> nav.navigate(Routes.setupNames(entry.arguments?.getString("cohortId")!!)) },
+                    onBack = { nav.popBackStack() }
+                )
+            }
+            composable(
+                route = Routes.SETUP_NAMES,
+                arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
+            ) { entry ->
+                val parentEntry = remember(entry) { nav.getBackStackEntry(Routes.SETUP_COUNT) }
+                val vm: SessionViewModel = hiltViewModel(parentEntry)
+                NameEditingScreen(
+                    vm = vm,
+                    onStartSession = { nav.navigate(Routes.session(entry.arguments?.getString("cohortId")!!)) },
+                    onBack = { nav.popBackStack() }
+                )
+            }
+            composable(
                 route = Routes.SESSION,
                 arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
             ) { entry ->
+                // Try to get the shared VM if it exists (coming from setup flow)
+                val setupEntry = try { nav.getBackStackEntry(Routes.SETUP_COUNT) } catch (e: Exception) { null }
+                val vm: SessionViewModel = if (setupEntry != null) hiltViewModel(setupEntry) else hiltViewModel()
+
                 SessionScreen(
-                    cohortId = entry.arguments?.getString("cohortId").orEmpty(),
+                    vm = vm,
                     onEnd = { sessionId ->
                         nav.navigate(Routes.summary(sessionId)) {
                             popUpTo(Routes.HOME)

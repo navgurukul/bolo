@@ -9,6 +9,7 @@ import co.bolo.app.data.model.Student
 import co.bolo.app.data.repo.CohortRepo
 import co.bolo.app.data.repo.SessionRepo
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +35,9 @@ data class SessionUiState(
     val perStudentSpeechMs: Map<String, Long> = emptyMap(),
     val perStudentEnglishMs: Map<String, Long> = emptyMap(),
     val totalSpeechMs: Long = 0L,
-    val totalEnglishMs: Long = 0L
+    val totalEnglishMs: Long = 0L,
+    val participantCount: Int = 0,
+    val setupNames: List<String> = emptyList()
 ) {
     enum class Phase { PickingTopic, Running, Ending }
 }
@@ -55,12 +58,42 @@ class SessionViewModel @Inject constructor(
     private var startedAt: Long = 0L
     private var loop: Job? = null
     private val rng = Random(System.currentTimeMillis())
+    private var isManualSetup = false
 
     init {
         viewModelScope.launch {
             cohortRepo.observeStudents(cohortId).collect { list ->
-                _state.value = _state.value.copy(students = list)
+                if (!isManualSetup) {
+                    _state.value = _state.value.copy(students = list)
+                }
             }
+        }
+    }
+
+    fun setParticipantCount(count: Int) {
+        isManualSetup = true
+        _state.value = _state.value.copy(
+            participantCount = count,
+            setupNames = List(count) { "Participant ${it + 1}" }
+        )
+    }
+
+    fun updateSetupName(index: Int, name: String) {
+        val names = _state.value.setupNames.toMutableList()
+        if (index in names.indices) {
+            names[index] = name
+            _state.value = _state.value.copy(setupNames = names)
+        }
+    }
+
+    fun finalizeParticipants() {
+        val names = _state.value.setupNames
+        if (names.isNotEmpty()) {
+            _state.value = _state.value.copy(
+                students = names.mapIndexed { i, name ->
+                    Student(id = "temp-$i-${UUID.randomUUID()}", cohortId = cohortId, displayName = name)
+                }
+            )
         }
     }
 
@@ -81,7 +114,7 @@ class SessionViewModel @Inject constructor(
         loop = viewModelScope.launch { tick() }
     }
 
-    private suspend fun tick() {
+    private suspend fun CoroutineScope.tick() {
         val tickMs = 250L
         while (isActive && _state.value.phase == SessionUiState.Phase.Running) {
             delay(tickMs)
