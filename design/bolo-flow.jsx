@@ -111,12 +111,24 @@ function BoloFlow({ themeId, initialScreen = 'home' }) {
 
   return (
     <PhoneShell t={t}>
-      {screen === 'home'      && <HomeScreen      t={t} state={state} set={set} />}
-      {screen === 'enroll'    && <EnrollScreen    t={t} state={state} set={set} />}
-      {screen === 'start'     && <StartScreen     t={t} state={state} set={set} />}
-      {screen === 'live'      && <LiveScreen      t={t} state={state} set={set} />}
-      {screen === 'summary'   && <SummaryScreen   t={t} state={state} set={set} />}
-      {screen === 'dashboard' && <DashboardScreen t={t} state={state} set={set} />}
+      {screen === 'splash'         && <SplashScreen        t={t} state={state} set={set} />}
+      {screen === 'pair'           && <PairScreen          t={t} state={state} set={set} />}
+      {screen === 'consent'        && <ConsentScreen       t={t} state={state} set={set} />}
+      {screen === 'mic-perm'       && <MicPermScreen       t={t} state={state} set={set} />}
+      {screen === 'cohort-setup'   && <CohortSetupScreen   t={t} state={state} set={set} />}
+      {screen === 'home'           && <HomeScreen          t={t} state={state} set={set} />}
+      {screen === 'enroll'         && <EnrollScreen        t={t} state={state} set={set} />}
+      {screen === 'start'          && <StartScreen         t={t} state={state} set={set} />}
+      {screen === 'attendance'     && <AttendanceScreen    t={t} state={state} set={set} />}
+      {screen === 'add-student'    && <AddStudentScreen    t={t} state={state} set={set} />}
+      {screen === 'live'           && <LiveScreen          t={t} state={state} set={set} />}
+      {screen === 'summary'        && <SummaryScreen       t={t} state={state} set={set} />}
+      {screen === 'dashboard'      && <DashboardScreen     t={t} state={state} set={set} />}
+      {screen === 'history'        && <HistoryScreen       t={t} state={state} set={set} />}
+      {screen === 'session-detail' && <SessionDetailScreen t={t} state={state} set={set} />}
+      {screen === 'settings'       && <SettingsScreen      t={t} state={state} set={set} />}
+      {screen === 'forget-voice'   && <ForgetVoiceScreen   t={t} state={state} set={set} />}
+      {screen === 'sync'           && <SyncScreen          t={t} state={state} set={set} />}
     </PhoneShell>
   );
 }
