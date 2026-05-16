@@ -9,6 +9,7 @@ import co.bolo.app.data.model.Cohort
 import co.bolo.app.data.model.Session
 import co.bolo.app.data.model.SpeakerStat
 import co.bolo.app.data.model.Student
+import co.bolo.app.data.model.TranscriptChunk
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -69,4 +70,16 @@ interface SpeakerStatDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(stats: List<SpeakerStat>)
+}
+
+@Dao
+interface TranscriptChunkDao {
+    @Query("SELECT * FROM transcript_chunks WHERE sessionId = :sessionId ORDER BY sequence ASC")
+    fun observeBySession(sessionId: String): Flow<List<TranscriptChunk>>
+
+    @Query("SELECT * FROM transcript_chunks WHERE sessionId = :sessionId ORDER BY sequence ASC")
+    suspend fun bySession(sessionId: String): List<TranscriptChunk>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(chunks: List<TranscriptChunk>)
 }

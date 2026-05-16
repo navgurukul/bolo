@@ -8,6 +8,7 @@ import co.bolo.app.data.db.CohortDao
 import co.bolo.app.data.db.SessionDao
 import co.bolo.app.data.db.SpeakerStatDao
 import co.bolo.app.data.db.StudentDao
+import co.bolo.app.data.db.TranscriptChunkDao
 import co.bolo.app.data.repo.SessionManager
 import co.bolo.app.data.seed.Seed
 import dagger.Module
@@ -47,6 +48,7 @@ object AppModule {
     @Provides fun studentDao(db: BoloDatabase): StudentDao = db.studentDao()
     @Provides fun sessionDao(db: BoloDatabase): SessionDao = db.sessionDao()
     @Provides fun statDao(db: BoloDatabase): SpeakerStatDao = db.speakerStatDao()
+    @Provides fun transcriptChunkDao(db: BoloDatabase): TranscriptChunkDao = db.transcriptChunkDao()
 
     @Provides
     @Singleton

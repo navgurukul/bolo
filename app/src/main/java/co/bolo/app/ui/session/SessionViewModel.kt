@@ -8,10 +8,12 @@ import androidx.lifecycle.viewModelScope
 import co.bolo.app.data.model.Session
 import co.bolo.app.data.model.SpeakerStat
 import co.bolo.app.data.model.Student
+import co.bolo.app.data.model.TranscriptChunk
 import co.bolo.app.data.repo.CohortRepo
 import co.bolo.app.data.repo.SessionManager
 import co.bolo.app.data.repo.SessionRepo
 import co.bolo.app.service.SessionService
+import co.bolo.app.util.ChunkAnalysis
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -38,8 +40,7 @@ data class SessionUiState(
     val participantCount: Int = 0,
     val setupNames: List<String> = emptyList(),
     val isPermissionGranted: Boolean = false,
-    val transcript: String = "",
-    val chunksProcessed: Int = 0
+    val chunks: List<ChunkAnalysis> = emptyList()
 ) {
     enum class Phase { PickingTopic, Running, Ending }
 }
@@ -82,14 +83,8 @@ class SessionViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            sessionManager.transcript.collect { text ->
-                _state.value = _state.value.copy(transcript = text)
-            }
-        }
-
-        viewModelScope.launch {
-            sessionManager.chunksProcessed.collect { count ->
-                _state.value = _state.value.copy(chunksProcessed = count)
+            sessionManager.chunks.collect { list ->
+                _state.value = _state.value.copy(chunks = list)
             }
         }
     }
@@ -180,7 +175,10 @@ class SessionViewModel @Inject constructor(
             cohortRepo.upsertStudent(student)
         }
         
-        // 2. Persist the session with internal analysis data
+        val totalEnglishWords = s.chunks.sumOf { it.englishCount }
+        val totalMeaningfulTokens = s.chunks.sumOf { it.meaningfulCount }
+
+        // 2. Persist the session with summary data
         sessionRepo.upsertSession(
             Session(
                 id = id,
@@ -190,8 +188,10 @@ class SessionViewModel @Inject constructor(
                 endedAt = now,
                 totalSpeechMs = s.totalSpeechMs,
                 englishSpeechMs = s.totalEnglishMs,
-                transcript = s.transcript,
-                chunksProcessed = s.chunksProcessed
+                transcript = s.chunks.joinToString("\n") { it.raw },
+                chunksProcessed = s.chunks.size,
+                englishWordCount = totalEnglishWords,
+                meaningfulTokenCount = totalMeaningfulTokens
             )
         )
         
@@ -206,6 +206,20 @@ class SessionViewModel @Inject constructor(
             )
         }
         sessionRepo.upsertStats(stats)
+
+        // 4. Save detailed transcript chunks for debug/analysis
+        val transcriptChunks = s.chunks.mapIndexed { index, analysis ->
+            TranscriptChunk(
+                sessionId = id,
+                sequence = index,
+                rawText = analysis.raw,
+                cleanedText = analysis.cleaned,
+                englishCount = analysis.englishCount,
+                meaningfulCount = analysis.meaningfulCount,
+                fillerCount = analysis.fillerCount
+            )
+        }
+        sessionRepo.insertChunks(transcriptChunks)
 
         return id
     }

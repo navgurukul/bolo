@@ -4,12 +4,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 object Format {
     private val dayFmt = SimpleDateFormat("d MMM", Locale.getDefault())
     private val dayYearFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
-    fun percent(share: Float): String = "${(share * 100).toInt()}%"
+    fun percent(share: Float): String = "${(share * 100f).roundToInt()}%"
 
     fun minutes(ms: Long): String {
         val mins = TimeUnit.MILLISECONDS.toMinutes(ms)

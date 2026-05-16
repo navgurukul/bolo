@@ -31,8 +31,6 @@ class SessionService : Service() {
     private var speechRecognizer: SpeechRecognizer? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
-    private var fullTranscript = ""
-    private var allTokens = mutableListOf<String>()
     private var chunkCount = 0
 
     inner class LocalBinder : Binder() {
@@ -61,8 +59,6 @@ class SessionService : Service() {
                     override fun onEndOfSpeech() {}
                     override fun onError(error: Int) {
                         Log.e("SessionService", "Speech recognition error: $error")
-                        // Error 7 (No match) is common when people stop talking.
-                        // Error 6 (Timeout) is also common.
                         serviceScope.launch {
                             delay(500)
                             startListening()
@@ -100,11 +96,8 @@ class SessionService : Service() {
 
     private fun processTranscriptChunk(chunk: String) {
         chunkCount++
-        fullTranscript += " $chunk"
-        val newTokens = EnglishAnalyzer.cleanAndTokenize(chunk)
-        allTokens.addAll(newTokens)
-        val percentage = EnglishAnalyzer.calculateEnglishPercentage(allTokens)
-        sessionManager.updateMetrics(percentage, fullTranscript, chunkCount)
+        val analysis = EnglishAnalyzer.analyzeChunk(chunk)
+        sessionManager.addChunk(analysis)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
