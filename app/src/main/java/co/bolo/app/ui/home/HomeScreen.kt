@@ -28,15 +28,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import co.bolo.app.data.model.Session
 import co.bolo.app.data.model.Student
-import co.bolo.app.ui.components.BreathingRedDot
+import co.bolo.app.ui.components.BoloPrivacyNote
+import co.bolo.app.ui.components.BoloSyncedPill
 import co.bolo.app.ui.components.Hairline
 import co.bolo.app.ui.components.Wordmark
 import co.bolo.app.ui.theme.BoloPalette
-import co.bolo.app.util.Format
+import co.bolo.app.ui.theme.MonoData
 
 @Composable
 fun HomeScreen(
@@ -44,6 +45,8 @@ fun HomeScreen(
     onOpenDashboard: (studentId: String) -> Unit,
     onEnroll: (cohortId: String, studentId: String) -> Unit,
     onOpenSession: (sessionId: String) -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenSettings: () -> Unit,
     vm: HomeViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -61,8 +64,18 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Wordmark()
-                BreathingRedDot(active = false, size = 9.dp)
+                BoloSyncedPill()
             }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Pune · Batch 14 · ${state.students.size.coerceAtLeast(6)} students",
+                color = BoloPalette.InkFaint,
+                fontFamily = MonoData,
+                fontSize = 11.sp,
+                letterSpacing = 0.5.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         if (state.recentSessions.isEmpty() && state.cohorts.isNotEmpty() && state.students.isEmpty()) {
@@ -109,7 +122,7 @@ fun HomeScreen(
                             Column {
                                 Text(c.name, style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
                                 Text(
-                                    "Created ${Format.relativeDay(c.createdAt)}",
+                                    "Created ${co.bolo.app.util.Format.relativeDay(c.createdAt)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = BoloPalette.InkFaint
                                 )
@@ -181,25 +194,61 @@ fun HomeScreen(
                 }
             }
 
-            if (state.recentSessions.isNotEmpty()) {
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    Hairline()
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "RECENT SESSIONS",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = BoloPalette.InkFaint
-                    )
-                }
+            item {
+                Spacer(Modifier.height(8.dp))
+                Hairline()
+                HomeLink(label = "See your progress", onClick = {
+                    state.students.firstOrNull()?.let { onOpenDashboard(it.id) }
+                })
+                Hairline()
+                HomeLink(label = "Past sessions", hint = "6 this month", onClick = onOpenHistory)
+                Hairline()
+                HomeLink(label = "Enroll a new voice", onClick = {
+                    val cid = cohortId ?: return@HomeLink
+                    state.students.firstOrNull()?.let { onEnroll(cid, it.id) }
+                })
+                Hairline()
+                HomeLink(label = "Settings", onClick = onOpenSettings)
+                Hairline()
+            }
 
-                items(state.recentSessions, key = { it.id }) { ses ->
-                    RecentSessionRow(ses, onOpen = { onOpenSession(ses.id) })
-                }
+            item {
+                Spacer(Modifier.height(16.dp))
+                BoloPrivacyNote(
+                    "Bolo never records or stores audio. It listens, classifies, and forgets — in real time."
+                )
             }
         }
 
         item { Spacer(Modifier.height(40.dp)) }
+    }
+}
+
+@Composable
+private fun HomeLink(label: String, onClick: () -> Unit, hint: String? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            color = BoloPalette.Ink,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f)
+        )
+        if (hint != null) {
+            Text(
+                hint,
+                color = BoloPalette.InkFaint,
+                fontFamily = MonoData,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(end = 10.dp)
+            )
+        }
+        Text("→", color = BoloPalette.InkFaint, fontSize = 16.sp)
     }
 }
 
@@ -279,34 +328,5 @@ private fun StudentRow(
                 style = MaterialTheme.typography.labelLarge
             )
         }
-    }
-}
-
-@Composable
-private fun RecentSessionRow(session: Session, onOpen: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(BoloPalette.Surface)
-            .border(1.dp, BoloPalette.Hairline, RoundedCornerShape(12.dp))
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column {
-            Text(session.topic, style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
-            Text(
-                Format.relativeDay(session.startedAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = BoloPalette.InkFaint
-            )
-        }
-        Text(
-            Format.percent(session.englishShare) + " English",
-            style = MaterialTheme.typography.titleMedium,
-            color = BoloPalette.SageDeep
-        )
     }
 }

@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
@@ -26,22 +29,32 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.bolo.app.ui.components.BoloCaption
+import co.bolo.app.ui.components.BoloItalicAccent
+import co.bolo.app.ui.components.BoloQuietButton
+import co.bolo.app.ui.components.BoloSolidButton
 import co.bolo.app.ui.components.BreathingRedDot
 import co.bolo.app.ui.components.EnglishRing
 import co.bolo.app.ui.components.TopicPill
 import co.bolo.app.ui.theme.BoloPalette
+import co.bolo.app.ui.theme.MonoData
 import co.bolo.app.util.Format
 import kotlinx.coroutines.launch
 
@@ -185,76 +198,240 @@ private fun TopicPicker(
 @Composable
 private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    // For MVP without diarization, we don't display "Now Speaking" reliably
+    var paused by remember { mutableStateOf(false) }
+    var topicOpen by remember { mutableStateOf(false) }
+    var liveTopic by remember(state.topic) { mutableStateOf(state.topic.ifBlank { "Free talk" }) }
     val currentSpeaker = if (state.students.size > 1) "Group Session" else state.students.firstOrNull()?.displayName ?: "—"
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BoloPalette.Bg)
-            .padding(PaddingValues(horizontal = 22.dp, vertical = 28.dp)),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(state.topic, style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BreathingRedDot(active = true, size = 10.dp)
-                Spacer(Modifier.padding(start = 8.dp))
-                Text("REC", style = MaterialTheme.typography.labelSmall, color = BoloPalette.MicRed)
-            }
-        }
-        Spacer(Modifier.height(40.dp))
-
-        EnglishRing(share = state.englishShareRolling, drift = state.drifting, diameter = 240.dp) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    Format.clockMs(state.elapsedMs),
-                    style = MaterialTheme.typography.displayMedium,
-                    color = BoloPalette.Ink
-                )
-                Text(
-                    "${(state.englishShareRolling * 100).toInt()}% English usage",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = BoloPalette.SageDeep
-                )
-            }
-        }
-
-        Spacer(Modifier.height(32.dp))
-        Text("PARTICIPANTS", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
-        Spacer(Modifier.height(6.dp))
-        Text(currentSpeaker, style = MaterialTheme.typography.headlineSmall, color = BoloPalette.Ink)
-
-        Spacer(Modifier.weight(1f))
-        
-        // Show a snippet of the transcript internally if needed for debugging or transparency
-        // For MVP, we'll keep it hidden as per requirements, but the state is there.
-
-        Box(
+    Box(modifier = Modifier.fillMaxSize().background(BoloPalette.Bg)) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(BoloPalette.SurfaceMuted)
-                .clickable {
+                .fillMaxSize()
+                .padding(PaddingValues(horizontal = 22.dp, vertical = 28.dp)),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Top row: breathing dot + MIC ON · topic (chevron) on left; pause + elapsed on right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { topicOpen = true }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (paused) BoloPalette.InkFaint else BoloPalette.MicRed)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "${if (paused) "PAUSED" else "MIC ON"} · ${liveTopic.uppercase()}",
+                        color = BoloPalette.InkMuted,
+                        fontFamily = MonoData,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.5.sp
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "▾",
+                        color = BoloPalette.InkMuted,
+                        fontSize = 11.sp
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .border(1.dp, BoloPalette.Hairline, RoundedCornerShape(999.dp))
+                        .clickable { paused = !paused }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (paused) "▶" else "II",
+                        color = BoloPalette.Ink,
+                        fontFamily = MonoData,
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        Format.clockMs(state.elapsedMs),
+                        color = BoloPalette.Ink,
+                        fontFamily = MonoData,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+            Spacer(Modifier.height(40.dp))
+
+            EnglishRing(share = state.englishShareRolling, drift = state.drifting, diameter = 240.dp) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        Format.clockMs(state.elapsedMs),
+                        style = MaterialTheme.typography.displayMedium,
+                        color = BoloPalette.Ink
+                    )
+                    Text(
+                        "${(state.englishShareRolling * 100).toInt()}% English usage",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = BoloPalette.SageDeep
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+            Text("PARTICIPANTS", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
+            Spacer(Modifier.height(6.dp))
+            Text(currentSpeaker, style = MaterialTheme.typography.headlineSmall, color = BoloPalette.Ink)
+
+            Spacer(Modifier.weight(1f))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(BoloPalette.SurfaceMuted)
+                    .clickable {
+                        scope.launch {
+                            val id = vm.end()
+                            onEnd(id)
+                        }
+                    }
+                    .padding(vertical = 18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("End session", style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Only the English percentage is saved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = BoloPalette.InkFaint
+            )
+        }
+
+        if (paused) {
+            PauseOverlay(
+                onResume = { paused = false },
+                onEnd = {
                     scope.launch {
                         val id = vm.end()
                         onEnd(id)
                     }
                 }
-                .padding(vertical = 18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("End session", style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
+            )
         }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "Only the English percentage is saved.",
-            style = MaterialTheme.typography.bodySmall,
-            color = BoloPalette.InkFaint
-        )
+
+        if (topicOpen) {
+            TopicSwitchSheet(
+                current = liveTopic,
+                onPick = { picked ->
+                    liveTopic = picked
+                    topicOpen = false
+                },
+                onClose = { topicOpen = false }
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PauseOverlay — dimmed scrim + centred card with italic "Paused."
+// ─────────────────────────────────────────────────────────────
+@Composable
+fun PauseOverlay(onResume: () -> Unit, onEnd: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BoloPalette.Ink.copy(alpha = 0.55f))
+            .clickable(enabled = false) { },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(280.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(BoloPalette.Surface)
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            BoloItalicAccent("Paused.", fontSize = 26)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "The mic is muted. Nothing is being counted right now.",
+                color = BoloPalette.InkMuted,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(22.dp))
+            BoloSolidButton("Resume listening", onClick = onResume)
+            Spacer(Modifier.height(8.dp))
+            BoloQuietButton("End the session", onClick = onEnd)
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TopicSwitchSheet — bottom sheet for swapping topic mid-session
+// ─────────────────────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TopicSwitchSheet(
+    current: String,
+    onPick: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BoloPalette.Ink.copy(alpha = 0.45f))
+            .clickable(onClick = onClose),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .background(BoloPalette.Surface)
+                .clickable(enabled = false) { }
+                .padding(horizontal = 24.dp, vertical = 20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(BoloPalette.Ink.copy(alpha = 0.22f))
+                )
+            }
+            BoloCaption("Switch topic mid-session")
+            Spacer(Modifier.height(4.dp))
+            BoloItalicAccent("What are we talking about now?", fontSize = 22)
+            Spacer(Modifier.height(16.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                co.bolo.app.ui.components.BOLO_TOPICS.forEach { tp ->
+                    TopicPill(
+                        label = tp,
+                        selected = tp == current,
+                        onClick = { onPick(tp) }
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "The session continues — we'll just tag what's said from here on with the new topic.",
+                color = BoloPalette.InkFaint,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }
