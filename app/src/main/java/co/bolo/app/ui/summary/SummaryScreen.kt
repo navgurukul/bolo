@@ -1,7 +1,6 @@
 package co.bolo.app.ui.summary
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,14 +24,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.bolo.app.analysis.ClassificationSource
+import co.bolo.app.analysis.ClassificationType
+import co.bolo.app.analysis.TokenAnalysis
 import co.bolo.app.data.model.TranscriptChunk
 import co.bolo.app.ui.components.Hairline
 import co.bolo.app.ui.components.StaticEnglishHalo
 import co.bolo.app.ui.theme.AccentItalic
 import co.bolo.app.ui.theme.BoloPalette
-import co.bolo.app.util.ClassificationReason
 import co.bolo.app.util.Format
-import co.bolo.app.util.TokenAnalysis
 
 private const val REFLECTION = "Which moment did you switch — and what word was missing?"
 
@@ -241,7 +241,7 @@ private fun AnalysisSummaryCard(state: SummaryUiState) {
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Calculation Summary", style = MaterialTheme.typography.titleSmall, color = BoloPalette.Ink)
+            Text("Calculation Summary (Real AI Hybrid)", style = MaterialTheme.typography.titleSmall, color = BoloPalette.Ink)
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Total Chunks", style = MaterialTheme.typography.bodySmall, color = BoloPalette.InkMuted)
@@ -342,36 +342,52 @@ private fun ClassificationSamples(tokens: List<TokenAnalysis>) {
     Column(modifier = Modifier.padding(top = 12.dp)) {
         Text("CLASSIFICATION SAMPLES", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
         Spacer(Modifier.height(8.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             tokens.forEach { token ->
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            token.text,
+                            token.token,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.width(100.dp)
                         )
                         Text("→", modifier = Modifier.padding(horizontal = 8.dp), color = BoloPalette.InkFaint)
-                        val label = when {
-                            token.isEnglish -> "English"
-                            token.isFiller -> "Filler"
-                            token.isIgnored -> "Ignored"
-                            else -> "Non-English"
+                        
+                        val color = when (token.classification) {
+                            ClassificationType.ENGLISH, ClassificationType.LIKELY_ENGLISH, ClassificationType.PROPER_NOUN -> BoloPalette.SageDeep
+                            ClassificationType.NON_ENGLISH -> BoloPalette.MicRed
+                            else -> BoloPalette.InkFaint
                         }
-                        val color = when {
-                            token.isEnglish -> BoloPalette.SageDeep
-                            token.isFiller || token.isIgnored -> BoloPalette.InkFaint
-                            else -> BoloPalette.MicRed
-                        }
-                        Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium)
+                        Text(token.classification.name, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium)
                     }
+                    
+                    val sourceStr = when (token.source) {
+                        ClassificationSource.DICTIONARY -> "Dictionary"
+                        ClassificationSource.HEURISTIC -> "Heuristic"
+                        ClassificationSource.AI_FASTTEXT -> "AI (ML Kit FastText)"
+                        ClassificationSource.NOISE_OR_FILLER -> "Noise/Filler"
+                        ClassificationSource.UNKNOWN -> "Unknown"
+                    }
+                    
+                    val confidenceStr = if (token.source == ClassificationSource.AI_FASTTEXT) {
+                        " | Conf: ${(token.confidence * 100).toInt()}%"
+                    } else ""
+
                     Text(
-                        "Reason: ${token.reason.description}${if (token.stem != null) " (Stem: ${token.stem})" else ""}",
+                        "Source: $sourceStr$confidenceStr",
                         style = MaterialTheme.typography.labelSmall,
                         color = BoloPalette.InkMuted,
                         fontSize = 10.sp
                     )
+                    if (token.reason != null) {
+                        Text(
+                            "Reason: ${token.reason}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = BoloPalette.InkFaint,
+                            fontSize = 9.sp
+                        )
+                    }
                 }
             }
         }
@@ -381,7 +397,7 @@ private fun ClassificationSamples(tokens: List<TokenAnalysis>) {
 @Composable
 private fun UnknownWordsSection(unknown: List<Pair<String, Int>>) {
     Column(modifier = Modifier.padding(top = 16.dp)) {
-        Text("UNKNOWN / UNCLASSIFIED WORDS", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
+        Text("TOP UNCLASSIFIED WORDS", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
         Spacer(Modifier.height(8.dp))
         Box(
             modifier = Modifier

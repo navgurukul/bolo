@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.bolo.app.analysis.ChunkAnalysis
 import co.bolo.app.data.model.Session
 import co.bolo.app.data.model.SpeakerStat
 import co.bolo.app.data.model.Student
@@ -13,7 +14,6 @@ import co.bolo.app.data.repo.CohortRepo
 import co.bolo.app.data.repo.SessionManager
 import co.bolo.app.data.repo.SessionRepo
 import co.bolo.app.service.SessionService
-import co.bolo.app.util.ChunkAnalysis
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -40,7 +40,8 @@ data class SessionUiState(
     val participantCount: Int = 0,
     val setupNames: List<String> = emptyList(),
     val isPermissionGranted: Boolean = false,
-    val chunks: List<ChunkAnalysis> = emptyList()
+    val chunks: List<ChunkAnalysis> = emptyList(),
+    val showDebugTranscript: Boolean = false
 ) {
     enum class Phase { PickingTopic, Running, Ending }
 }
@@ -91,6 +92,10 @@ class SessionViewModel @Inject constructor(
 
     fun onPermissionResult(granted: Boolean) {
         _state.value = _state.value.copy(isPermissionGranted = granted)
+    }
+
+    fun toggleDebugTranscript() {
+        _state.value = _state.value.copy(showDebugTranscript = !_state.value.showDebugTranscript)
     }
 
     fun setParticipantCount(count: Int) {
@@ -175,8 +180,8 @@ class SessionViewModel @Inject constructor(
             cohortRepo.upsertStudent(student)
         }
         
-        val totalEnglishWords = s.chunks.sumOf { it.englishCount }
-        val totalMeaningfulTokens = s.chunks.sumOf { it.meaningfulCount }
+        val totalEnglishWords = s.chunks.sumOf { it.metrics.englishCount }
+        val totalMeaningfulTokens = s.chunks.sumOf { it.metrics.meaningfulCount }
 
         // 2. Persist the session with summary data
         sessionRepo.upsertSession(
@@ -188,7 +193,7 @@ class SessionViewModel @Inject constructor(
                 endedAt = now,
                 totalSpeechMs = s.totalSpeechMs,
                 englishSpeechMs = s.totalEnglishMs,
-                transcript = s.chunks.joinToString("\n") { it.raw },
+                transcript = s.chunks.joinToString("\n") { it.rawText },
                 chunksProcessed = s.chunks.size,
                 englishWordCount = totalEnglishWords,
                 meaningfulTokenCount = totalMeaningfulTokens
@@ -212,11 +217,11 @@ class SessionViewModel @Inject constructor(
             TranscriptChunk(
                 sessionId = id,
                 sequence = index,
-                rawText = analysis.raw,
-                cleanedText = analysis.cleaned,
-                englishCount = analysis.englishCount,
-                meaningfulCount = analysis.meaningfulCount,
-                fillerCount = analysis.fillerCount
+                rawText = analysis.rawText,
+                cleanedText = analysis.tokens.filter { it.classification.isMeaningful() }.joinToString(" ") { it.normalized },
+                englishCount = analysis.metrics.englishCount,
+                meaningfulCount = analysis.metrics.meaningfulCount,
+                fillerCount = analysis.metrics.fillerCount
             )
         }
         sessionRepo.insertChunks(transcriptChunks)

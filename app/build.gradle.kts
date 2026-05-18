@@ -81,8 +81,12 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
+    
+    // Real language classification
+    implementation(libs.mlkit.language.id)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

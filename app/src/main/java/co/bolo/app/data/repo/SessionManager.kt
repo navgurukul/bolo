@@ -1,6 +1,6 @@
 package co.bolo.app.data.repo
 
-import co.bolo.app.util.ChunkAnalysis
+import co.bolo.app.analysis.ChunkAnalysis
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
@@ -22,8 +22,8 @@ class SessionManager @Inject constructor() {
         current.add(analysis)
         _chunks.value = current
         
-        val totalEnglish = current.sumOf { it.englishCount }
-        val totalMeaningful = current.sumOf { it.meaningfulCount }
+        val totalEnglish = current.sumOf { it.metrics.englishCount }
+        val totalMeaningful = current.sumOf { it.metrics.meaningfulCount }
         
         _englishPercentage.value = if (totalMeaningful > 0) {
             totalEnglish.toFloat() / totalMeaningful.toFloat()

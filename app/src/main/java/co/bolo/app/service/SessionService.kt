@@ -11,8 +11,9 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
+import co.bolo.app.analysis.DictionaryClassifier
+import co.bolo.app.analysis.TranscriptAnalyzer
 import co.bolo.app.data.repo.SessionManager
-import co.bolo.app.util.EnglishAnalyzer
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,12 +27,12 @@ import javax.inject.Inject
 class SessionService : Service() {
 
     @Inject lateinit var sessionManager: SessionManager
+    @Inject lateinit var transcriptAnalyzer: TranscriptAnalyzer
+    @Inject lateinit var dictionaryClassifier: DictionaryClassifier
 
     private val binder = LocalBinder()
     private var speechRecognizer: SpeechRecognizer? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
-
-    private var chunkCount = 0
 
     inner class LocalBinder : Binder() {
         fun getService(): SessionService = this@SessionService
@@ -41,6 +42,7 @@ class SessionService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        dictionaryClassifier.initialize(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
         initSpeechRecognizer()
@@ -95,9 +97,10 @@ class SessionService : Service() {
     }
 
     private fun processTranscriptChunk(chunk: String) {
-        chunkCount++
-        val analysis = EnglishAnalyzer.analyzeChunk(chunk)
-        sessionManager.addChunk(analysis)
+        serviceScope.launch {
+            val analysis = transcriptAnalyzer.analyze(chunk)
+            sessionManager.addChunk(analysis)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
