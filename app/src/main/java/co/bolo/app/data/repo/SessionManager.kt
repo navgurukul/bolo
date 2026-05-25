@@ -17,9 +17,17 @@ class SessionManager @Inject constructor() {
     private val _chunks = MutableStateFlow<List<ChunkAnalysis>>(emptyList())
     val chunks = _chunks.asStateFlow()
 
+    private val _activeSpeakerId = MutableStateFlow<String?>(null)
+    val activeSpeakerId = _activeSpeakerId.asStateFlow()
+
+    fun setActiveSpeaker(studentId: String?) {
+        _activeSpeakerId.value = studentId
+    }
+
     fun addChunk(analysis: ChunkAnalysis) {
+        val analysisWithSpeaker = analysis.copy(speakerId = _activeSpeakerId.value)
         val current = _chunks.value.toMutableList()
-        current.add(analysis)
+        current.add(analysisWithSpeaker)
         _chunks.value = current
         
         val totalEnglish = current.sumOf { it.metrics.englishCount }
@@ -35,6 +43,7 @@ class SessionManager @Inject constructor() {
         if (!recording) {
             _englishPercentage.value = 0f
             _chunks.value = emptyList()
+            _activeSpeakerId.value = null
         }
     }
 }

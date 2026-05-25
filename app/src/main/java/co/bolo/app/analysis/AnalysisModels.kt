@@ -21,7 +21,8 @@ data class ChunkAnalysis(
     val rawText: String,
     val tokens: List<TokenAnalysis>,
     val englishScore: Float, // 0.0 to 1.0
-    val metrics: ChunkMetrics
+    val metrics: ChunkMetrics,
+    val speakerId: String? = null
 )
 
 data class ChunkMetrics(

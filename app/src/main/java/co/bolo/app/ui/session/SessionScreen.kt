@@ -46,6 +46,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.bolo.app.ui.components.BoloAvatar
 import co.bolo.app.ui.components.BoloCaption
 import co.bolo.app.ui.components.BoloItalicAccent
 import co.bolo.app.ui.components.BoloQuietButton
@@ -195,6 +196,7 @@ private fun TopicPicker(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (String) -> Unit) {
     val scope = rememberCoroutineScope()
@@ -281,10 +283,96 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
-            Text("PARTICIPANTS", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
-            Spacer(Modifier.height(6.dp))
-            Text(currentSpeaker, style = MaterialTheme.typography.headlineSmall, color = BoloPalette.Ink)
+            Spacer(Modifier.height(28.dp))
+            Text(
+                "TAP ACTIVE SPEAKER TO TRACK TIME", 
+                style = MaterialTheme.typography.labelSmall, 
+                color = BoloPalette.InkFaint,
+                fontFamily = MonoData,
+                letterSpacing = 1.2.sp
+            )
+            Spacer(Modifier.height(12.dp))
+            
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // General Group option
+                val isGeneralActive = state.activeSpeakerId == null
+                val generalBg = if (isGeneralActive) BoloPalette.SageSoft else BoloPalette.Surface
+                val generalBorder = if (isGeneralActive) BoloPalette.Sage else BoloPalette.Hairline
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(generalBg)
+                        .border(1.dp, generalBorder, RoundedCornerShape(999.dp))
+                        .clickable { vm.selectActiveSpeaker(null) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(BoloPalette.SurfaceMuted)
+                            .border(1.dp, if (isGeneralActive) BoloPalette.Sage else BoloPalette.Hairline, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "👥",
+                            fontSize = 11.sp
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Group",
+                        color = BoloPalette.Ink,
+                        fontWeight = if (isGeneralActive) FontWeight.SemiBold else FontWeight.Normal,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                // Student options
+                state.students.forEach { student ->
+                    val isActive = state.activeSpeakerId == student.id
+                    val bg = if (isActive) BoloPalette.SageSoft else BoloPalette.Surface
+                    val border = if (isActive) BoloPalette.Sage else BoloPalette.Hairline
+                    val speakingMs = state.studentSpeechMs[student.id] ?: 0L
+                    
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(bg)
+                            .border(1.dp, border, RoundedCornerShape(999.dp))
+                            .clickable { vm.selectActiveSpeaker(student.id) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        BoloAvatar(
+                            name = student.displayName,
+                            size = 24.dp,
+                            active = isActive
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            student.displayName,
+                            color = BoloPalette.Ink,
+                            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (speakingMs > 0L) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "(${Format.clockMs(speakingMs)})",
+                                color = if (isActive) BoloPalette.SageDeep else BoloPalette.InkFaint,
+                                fontFamily = MonoData,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(Modifier.weight(1f))
 

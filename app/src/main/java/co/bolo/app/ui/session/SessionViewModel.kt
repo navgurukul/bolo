@@ -41,7 +41,9 @@ data class SessionUiState(
     val setupNames: List<String> = emptyList(),
     val isPermissionGranted: Boolean = false,
     val chunks: List<ChunkAnalysis> = emptyList(),
-    val showDebugTranscript: Boolean = false
+    val showDebugTranscript: Boolean = false,
+    val activeSpeakerId: String? = null,
+    val studentSpeechMs: Map<String, Long> = emptyMap()
 ) {
     enum class Phase { PickingTopic, Running, Ending }
 }
@@ -64,6 +66,7 @@ class SessionViewModel @Inject constructor(
     private var startedAt: Long = 0L
     private var timerJob: Job? = null
     private var isManualSetup = false
+    private val studentSpeechMsMap = mutableMapOf<String, Long>()
 
     init {
         viewModelScope.launch {
@@ -86,6 +89,12 @@ class SessionViewModel @Inject constructor(
         viewModelScope.launch {
             sessionManager.chunks.collect { list ->
                 _state.value = _state.value.copy(chunks = list)
+            }
+        }
+
+        viewModelScope.launch {
+            sessionManager.activeSpeakerId.collect { activeId ->
+                _state.value = _state.value.copy(activeSpeakerId = activeId)
             }
         }
     }
@@ -135,14 +144,26 @@ class SessionViewModel @Inject constructor(
     fun resolvedTopic(): String =
         _state.value.topic.ifBlank { _state.value.customTopic.trim() }
 
+    fun selectActiveSpeaker(studentId: String?) {
+        sessionManager.setActiveSpeaker(studentId)
+    }
+
     fun start() {
         val topic = resolvedTopic().ifBlank { "Free talk" }
         sessionId = UUID.randomUUID().toString()
         startedAt = System.currentTimeMillis()
+        
+        studentSpeechMsMap.clear()
+        _state.value.students.forEach {
+            studentSpeechMsMap[it.id] = 0L
+        }
+        
         _state.value = _state.value.copy(
             phase = SessionUiState.Phase.Running,
             topic = topic,
-            elapsedMs = 0L
+            elapsedMs = 0L,
+            studentSpeechMs = studentSpeechMsMap.toMap(),
+            activeSpeakerId = null
         )
         
         val intent = Intent(context, SessionService::class.java)
@@ -156,9 +177,17 @@ class SessionViewModel @Inject constructor(
         timerJob = viewModelScope.launch {
             while (isActive) {
                 delay(1000)
+                
+                val currentActiveSpeakerId = sessionManager.activeSpeakerId.value
+                if (currentActiveSpeakerId != null && studentSpeechMsMap.containsKey(currentActiveSpeakerId)) {
+                    val prevTime = studentSpeechMsMap[currentActiveSpeakerId] ?: 0L
+                    studentSpeechMsMap[currentActiveSpeakerId] = prevTime + 1000L
+                }
+                
                 _state.value = _state.value.copy(
                     elapsedMs = _state.value.elapsedMs + 1000,
-                    totalSpeechMs = _state.value.totalSpeechMs + 1000
+                    totalSpeechMs = _state.value.totalSpeechMs + 1000,
+                    studentSpeechMs = studentSpeechMsMap.toMap()
                 )
             }
         }
@@ -202,12 +231,22 @@ class SessionViewModel @Inject constructor(
         
         // 3. Link students to session
         val stats = s.students.map { stu ->
+            val studentChunks = s.chunks.filter { it.speakerId == stu.id }
+            val studentEnglishWords = studentChunks.sumOf { it.metrics.englishCount }
+            val studentMeaningfulTokens = studentChunks.sumOf { it.metrics.meaningfulCount }
+            
+            val speechMs = studentSpeechMsMap[stu.id] ?: 0L
+            val englishShare = if (studentMeaningfulTokens > 0) {
+                studentEnglishWords.toFloat() / studentMeaningfulTokens.toFloat()
+            } else 0f
+            val englishMs = (speechMs * englishShare).toLong()
+
             SpeakerStat(
                 id = "stat-$id-${stu.id}",
                 sessionId = id,
                 studentId = stu.id,
-                speechMs = 0, 
-                englishMs = 0
+                speechMs = speechMs,
+                englishMs = englishMs
             )
         }
         sessionRepo.upsertStats(stats)
@@ -221,7 +260,8 @@ class SessionViewModel @Inject constructor(
                 cleanedText = analysis.tokens.filter { it.classification.isMeaningful() }.joinToString(" ") { it.normalized },
                 englishCount = analysis.metrics.englishCount,
                 meaningfulCount = analysis.metrics.meaningfulCount,
-                fillerCount = analysis.metrics.fillerCount
+                fillerCount = analysis.metrics.fillerCount,
+                studentId = analysis.speakerId
             )
         }
         sessionRepo.insertChunks(transcriptChunks)

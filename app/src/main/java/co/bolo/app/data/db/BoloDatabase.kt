@@ -10,7 +10,7 @@ import co.bolo.app.data.model.TranscriptChunk
 
 @Database(
     entities = [Cohort::class, Student::class, Session::class, SpeakerStat::class, TranscriptChunk::class],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class BoloDatabase : RoomDatabase() {

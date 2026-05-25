@@ -26,5 +26,6 @@ data class TranscriptChunk(
     val englishCount: Int,
     val meaningfulCount: Int,
     val fillerCount: Int,
+    val studentId: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
