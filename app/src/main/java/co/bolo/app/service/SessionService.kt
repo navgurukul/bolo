@@ -14,12 +14,14 @@ import android.speech.SpeechRecognizer
 import android.util.Log
 import co.bolo.app.analysis.DictionaryClassifier
 import co.bolo.app.analysis.TranscriptAnalyzer
+import co.bolo.app.data.repo.RecognizerStatus
 import co.bolo.app.data.repo.SessionManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
@@ -44,7 +46,10 @@ class SessionService : Service() {
 
     private var isListening = false
     @Volatile private var isRecording = false
+    @Volatile private var isPaused = false
     private var currentBusyDelay = INITIAL_ERROR_DELAY_MS
+    private var consecutiveBusyErrors = 0
+    private var consecutiveNetworkErrors = 0
 
     private var savedMusicVolume: Int = -1
 
@@ -59,9 +64,45 @@ class SessionService : Service() {
         dictionaryClassifier.initialize(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
-        muteRecognizerBeep()
-        isRecording = true
-        initSpeechRecognizer()
+        try {
+            muteRecognizerBeep()
+            isRecording = true
+            initSpeechRecognizer()
+            observePauseState()
+        } catch (e: Exception) {
+            Log.e("SessionService", "onCreate failed — restoring state", e)
+            restoreRecognizerBeep()
+            stopSelf()
+        }
+    }
+
+    private fun observePauseState() {
+        // Skip the initial value (false) — onCreate already started listening.
+        serviceScope.launch {
+            sessionManager.paused.drop(1).collect { paused ->
+                if (paused) handlePauseRequested() else handleResumeRequested()
+            }
+        }
+    }
+
+    private fun handlePauseRequested() {
+        Log.d("SessionService", "Pausing recognizer")
+        isPaused = true
+        try {
+            // cancel() drops the current recognition session — any in-flight
+            // chunk is discarded so speech during the pause window doesn't
+            // get attributed to the active speaker after the user resumes.
+            speechRecognizer?.cancel()
+        } catch (e: Exception) {
+            Log.e("SessionService", "Error cancelling on pause", e)
+        }
+        isListening = false
+    }
+
+    private fun handleResumeRequested() {
+        Log.d("SessionService", "Resuming recognizer")
+        isPaused = false
+        startListening()
     }
 
     private val recognitionListener = object : RecognitionListener {
@@ -77,9 +118,31 @@ class SessionService : Service() {
         override fun onError(error: Int) {
             Log.e("SessionService", "Speech recognition error: $error")
             isListening = false
-            // The recognizer fires onError after destroy() too — bail out if
-            // we've already torn the service down.
             if (!isRecording || speechRecognizer == null) return
+
+            // Track + surface persistent failures so the user sees a banner
+            // instead of a silently 0% session.
+            when (error) {
+                SpeechRecognizer.ERROR_NETWORK,
+                SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
+                SpeechRecognizer.ERROR_SERVER -> {
+                    consecutiveNetworkErrors++
+                    val status = if (error == SpeechRecognizer.ERROR_SERVER)
+                        RecognizerStatus.ServerError else RecognizerStatus.NoInternet
+                    sessionManager.setRecognizerStatus(status)
+                }
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                    consecutiveBusyErrors++
+                    if (consecutiveBusyErrors >= MAX_CONSECUTIVE_BUSY) {
+                        sessionManager.setRecognizerStatus(RecognizerStatus.Overloaded)
+                    }
+                }
+                else -> {
+                    consecutiveBusyErrors = 0
+                }
+            }
+
+            if (isPaused) return
 
             val delay = when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
@@ -89,6 +152,9 @@ class SessionService : Service() {
                     currentBusyDelay = (currentBusyDelay * 2).coerceAtMost(MAX_ERROR_DELAY_MS)
                     d
                 }
+                SpeechRecognizer.ERROR_NETWORK,
+                SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
+                SpeechRecognizer.ERROR_SERVER -> NETWORK_RETRY_DELAY_MS
                 else -> INITIAL_ERROR_DELAY_MS
             }
             if (error != SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
@@ -103,6 +169,13 @@ class SessionService : Service() {
         override fun onResults(results: android.os.Bundle?) {
             isListening = false
             if (!isRecording || speechRecognizer == null) return
+            // A successful result means network + recognizer are healthy.
+            consecutiveNetworkErrors = 0
+            consecutiveBusyErrors = 0
+            if (sessionManager.recognizerStatus.value != RecognizerStatus.Ok) {
+                sessionManager.setRecognizerStatus(RecognizerStatus.Ok)
+            }
+            if (isPaused) return
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             if (!matches.isNullOrEmpty()) {
                 Log.d("SessionService", "Got transcript chunk: ${matches[0]}")
@@ -130,7 +203,7 @@ class SessionService : Service() {
     }
 
     private fun startListening() {
-        if (!isRecording || speechRecognizer == null) return
+        if (!isRecording || isPaused || speechRecognizer == null) return
         if (isListening) {
             Log.w("SessionService", "startListening called but already listening")
             return
@@ -158,7 +231,7 @@ class SessionService : Service() {
     }
 
     private fun restartListening() {
-        if (!isRecording || speechRecognizer == null) return
+        if (!isRecording || isPaused || speechRecognizer == null) return
         try {
             speechRecognizer?.cancel()
         } catch (e: Exception) {
@@ -178,16 +251,10 @@ class SessionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         isRecording = true
         sessionManager.setRecording(true)
-        // START_NOT_STICKY: do not let the framework auto-restart this service
-        // after a kill. A re-spawned service with no UI in front of it would
-        // re-init the recognizer and play the "ready" tone on a loop with no
-        // way for the user to stop it.
         return START_NOT_STICKY
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // User swiped Bolo from Recents. Tear down the recognizer immediately;
-        // on aggressive OEMs (Xiaomi/Vivo/Oppo) this is the only signal we get.
         Log.d("SessionService", "Task removed — stopping service")
         stopSelf()
         super.onTaskRemoved(rootIntent)
@@ -196,6 +263,7 @@ class SessionService : Service() {
     override fun onDestroy() {
         isRecording = false
         isListening = false
+        isPaused = false
         sessionManager.setRecording(false)
         val recognizer = speechRecognizer
         speechRecognizer = null
@@ -216,11 +284,6 @@ class SessionService : Service() {
     }
 
     private fun muteRecognizerBeep() {
-        // Google Speech Services emits a "ready for input" tone on every
-        // SpeechRecognizer.startListening(). Bolo restarts the recognizer
-        // every few seconds, so without this the user hears a periodic beep
-        // throughout the session. The tone is routed through STREAM_MUSIC
-        // on most OEMs, which can be muted without DND permission.
         val am = getSystemService(AUDIO_SERVICE) as? AudioManager ?: return
         savedMusicVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC)
         try {
@@ -267,6 +330,8 @@ class SessionService : Service() {
         private const val MIN_RESTART_DELAY_MS = 50L
         private const val ON_RESULTS_RESTART_DELAY_MS = 150L
         private const val INITIAL_ERROR_DELAY_MS = 500L
-        private const val MAX_ERROR_DELAY_MS = 4000L
+        private const val MAX_ERROR_DELAY_MS = 15_000L
+        private const val NETWORK_RETRY_DELAY_MS = 3_000L
+        private const val MAX_CONSECUTIVE_BUSY = 8
     }
 }

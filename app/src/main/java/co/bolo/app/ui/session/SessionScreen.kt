@@ -46,6 +46,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.bolo.app.data.repo.RecognizerStatus
 import co.bolo.app.ui.components.BoloAvatar
 import co.bolo.app.ui.components.BoloCaption
 import co.bolo.app.ui.components.BoloItalicAccent
@@ -186,7 +187,7 @@ private fun TopicPicker(
 @Composable
 private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    var paused by remember { mutableStateOf(false) }
+    val paused = state.paused
     var topicOpen by remember { mutableStateOf(false) }
     var liveTopic by remember(state.topic) { mutableStateOf(state.topic.ifBlank { "Free talk" }) }
     val currentSpeaker = if (state.students.size > 1) "Group Session" else state.students.firstOrNull()?.displayName ?: "—"
@@ -198,6 +199,7 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
                 .padding(PaddingValues(horizontal = 22.dp, vertical = 28.dp)),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            RecognizerStatusBanner(state.recognizerStatus)
             // Top row: breathing dot + MIC ON · topic (chevron) on left; pause + elapsed on right
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -233,7 +235,7 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .border(1.dp, BoloPalette.Hairline, RoundedCornerShape(999.dp))
-                        .clickable { paused = !paused }
+                        .clickable { vm.togglePause() }
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -382,7 +384,7 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
 
         if (paused) {
             PauseOverlay(
-                onResume = { paused = false },
+                onResume = { vm.togglePause() },
                 onEnd = {
                     scope.launch {
                         val id = vm.end()
@@ -403,6 +405,35 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
             )
         }
     }
+}
+
+@Composable
+private fun RecognizerStatusBanner(status: RecognizerStatus) {
+    if (status == RecognizerStatus.Ok) return
+    val message = when (status) {
+        RecognizerStatus.NoInternet ->
+            "No internet — speech can't be transcribed right now. Counts will resume when connection returns."
+        RecognizerStatus.ServerError ->
+            "Google's speech service is unavailable. Counts will resume when it's back."
+        RecognizerStatus.Overloaded ->
+            "Speech service is overloaded. Try ending and starting a fresh session."
+        RecognizerStatus.Ok -> return
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(BoloPalette.MicRed.copy(alpha = 0.12f))
+            .border(1.dp, BoloPalette.MicRed.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Text(
+            message,
+            color = BoloPalette.MicRed,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+    Spacer(Modifier.height(12.dp))
 }
 
 // ─────────────────────────────────────────────────────────────

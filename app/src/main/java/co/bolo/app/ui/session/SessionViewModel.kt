@@ -11,6 +11,7 @@ import co.bolo.app.data.model.SpeakerStat
 import co.bolo.app.data.model.Student
 import co.bolo.app.data.model.TranscriptChunk
 import co.bolo.app.data.repo.CohortRepo
+import co.bolo.app.data.repo.RecognizerStatus
 import co.bolo.app.data.repo.SessionManager
 import co.bolo.app.data.repo.SessionRepo
 import co.bolo.app.service.SessionService
@@ -41,7 +42,9 @@ data class SessionUiState(
     val chunks: List<ChunkAnalysis> = emptyList(),
     val showDebugTranscript: Boolean = false,
     val activeSpeakerId: String? = null,
-    val studentSpeechMs: Map<String, Long> = emptyMap()
+    val studentSpeechMs: Map<String, Long> = emptyMap(),
+    val paused: Boolean = false,
+    val recognizerStatus: RecognizerStatus = RecognizerStatus.Ok
 ) {
     enum class Phase { PickingTopic, Running, Ending }
 }
@@ -104,6 +107,22 @@ class SessionViewModel @Inject constructor(
                 _state.value = _state.value.copy(activeSpeakerId = activeId)
             }
         }
+
+        viewModelScope.launch {
+            sessionManager.paused.collect { paused ->
+                _state.value = _state.value.copy(paused = paused)
+            }
+        }
+
+        viewModelScope.launch {
+            sessionManager.recognizerStatus.collect { status ->
+                _state.value = _state.value.copy(recognizerStatus = status)
+            }
+        }
+    }
+
+    fun togglePause() {
+        sessionManager.setPaused(!sessionManager.paused.value)
     }
 
     fun onPermissionResult(granted: Boolean) {
@@ -152,6 +171,10 @@ class SessionViewModel @Inject constructor(
         timerJob = viewModelScope.launch {
             while (isActive) {
                 delay(1000)
+                // Freeze the clock + per-speaker counters while paused — pause
+                // means the recognizer is cancelled and no chunks are flowing,
+                // so it would be a lie to keep incrementing speech time.
+                if (sessionManager.paused.value) continue
 
                 val currentActiveSpeakerId = sessionManager.activeSpeakerId.value
                 if (currentActiveSpeakerId != null && studentSpeechMsMap.containsKey(currentActiveSpeakerId)) {

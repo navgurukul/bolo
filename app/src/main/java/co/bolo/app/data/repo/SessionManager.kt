@@ -6,6 +6,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Status of the cloud speech recognizer. Surfaced to the UI so a session
+ * doesn't silently fail (no internet, Google quota exhausted, etc.).
+ */
+enum class RecognizerStatus {
+    Ok,
+    NoInternet,
+    Overloaded,
+    ServerError
+}
+
 @Singleton
 class SessionManager @Inject constructor() {
     private val _isRecording = MutableStateFlow(false)
@@ -20,8 +31,22 @@ class SessionManager @Inject constructor() {
     private val _activeSpeakerId = MutableStateFlow<String?>(null)
     val activeSpeakerId = _activeSpeakerId.asStateFlow()
 
+    private val _paused = MutableStateFlow(false)
+    val paused = _paused.asStateFlow()
+
+    private val _recognizerStatus = MutableStateFlow(RecognizerStatus.Ok)
+    val recognizerStatus = _recognizerStatus.asStateFlow()
+
     fun setActiveSpeaker(studentId: String?) {
         _activeSpeakerId.value = studentId
+    }
+
+    fun setPaused(value: Boolean) {
+        _paused.value = value
+    }
+
+    fun setRecognizerStatus(status: RecognizerStatus) {
+        _recognizerStatus.value = status
     }
 
     fun addChunk(analysis: ChunkAnalysis) {
@@ -44,6 +69,8 @@ class SessionManager @Inject constructor() {
             _englishPercentage.value = 0f
             _chunks.value = emptyList()
             _activeSpeakerId.value = null
+            _paused.value = false
+            _recognizerStatus.value = RecognizerStatus.Ok
         }
     }
 }
