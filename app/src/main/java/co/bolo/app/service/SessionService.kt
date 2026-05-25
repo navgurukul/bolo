@@ -38,6 +38,9 @@ class SessionService : Service() {
     private var isListening = false
     private var isRecording = false
     private var currentBusyDelay = INITIAL_ERROR_DELAY_MS
+    private var usingOnDeviceRecognizer = false
+    private var fellBackToStandard = false
+    private var consecutiveErrors = 0
 
     inner class LocalBinder : Binder() {
         fun getService(): SessionService = this@SessionService
@@ -54,88 +57,100 @@ class SessionService : Service() {
         initSpeechRecognizer()
     }
 
+    private val recognitionListener = object : RecognitionListener {
+        override fun onReadyForSpeech(params: android.os.Bundle?) {
+            Log.d("SessionService", "Ready for speech (onDevice=$usingOnDeviceRecognizer)")
+            isListening = true
+            currentBusyDelay = INITIAL_ERROR_DELAY_MS
+        }
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onBufferReceived(buffer: ByteArray?) {}
+        override fun onEndOfSpeech() {}
+        override fun onError(error: Int) {
+            Log.e("SessionService", "Speech recognition error: $error (onDevice=$usingOnDeviceRecognizer)")
+            isListening = false
+            if (!isRecording) return
+
+            val unrecoverable = error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+                error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ||
+                error == SpeechRecognizer.ERROR_CLIENT
+            val tooManyTimeouts = (error == SpeechRecognizer.ERROR_NO_MATCH ||
+                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) && consecutiveErrors >= 5
+
+            if (usingOnDeviceRecognizer && !fellBackToStandard && (unrecoverable || tooManyTimeouts)) {
+                Log.w("SessionService", "On-device recognizer failing — falling back to standard network recognizer")
+                fellBackToStandard = true
+                consecutiveErrors = 0
+                serviceScope.launch { fallbackToStandardRecognizer() }
+                return
+            }
+
+            consecutiveErrors++
+
+            val delay = when (error) {
+                SpeechRecognizer.ERROR_NO_MATCH,
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> MIN_RESTART_DELAY_MS
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                    val d = currentBusyDelay
+                    currentBusyDelay = (currentBusyDelay * 2).coerceAtMost(MAX_ERROR_DELAY_MS)
+                    d
+                }
+                else -> INITIAL_ERROR_DELAY_MS
+            }
+            if (error != SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                currentBusyDelay = INITIAL_ERROR_DELAY_MS
+            }
+            serviceScope.launch {
+                delay(delay)
+                restartListening()
+            }
+        }
+
+        override fun onResults(results: android.os.Bundle?) {
+            isListening = false
+            consecutiveErrors = 0
+            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            if (!matches.isNullOrEmpty()) {
+                Log.d("SessionService", "Got transcript chunk: ${matches[0]}")
+                processTranscriptChunk(matches[0])
+            }
+            if (isRecording) {
+                serviceScope.launch {
+                    delay(ON_RESULTS_RESTART_DELAY_MS)
+                    restartListening()
+                }
+            }
+        }
+
+        override fun onPartialResults(partialResults: android.os.Bundle?) {}
+        override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+    }
+
     private fun initSpeechRecognizer() {
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            val recognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-            ) {
-                Log.d("SessionService", "Creating on-device speech recognizer")
-                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-            } else {
-                Log.d("SessionService", "Creating standard speech recognizer")
-                SpeechRecognizer.createSpeechRecognizer(this)
-            }
-
-            speechRecognizer = recognizer.apply {
-                setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: android.os.Bundle?) {
-                        Log.d("SessionService", "Ready for speech")
-                        isListening = true
-                        currentBusyDelay = INITIAL_ERROR_DELAY_MS
-                    }
-                    override fun onBeginningOfSpeech() {}
-                    override fun onRmsChanged(rmsdB: Float) {}
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-                    override fun onEndOfSpeech() {}
-                    override fun onError(error: Int) {
-                        Log.e("SessionService", "Speech recognition error: $error")
-                        isListening = false
-
-                        if (!isRecording) return
-
-                        val delay = when (error) {
-                            SpeechRecognizer.ERROR_NO_MATCH,
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
-                                // Silence/timeout - restart quickly to minimize mic dot flicker
-                                MIN_RESTART_DELAY_MS
-                            }
-                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
-                                // Busy error - use and double the backoff delay
-                                val d = currentBusyDelay
-                                currentBusyDelay = (currentBusyDelay * 2).coerceAtMost(MAX_ERROR_DELAY_MS)
-                                d
-                            }
-                            else -> {
-                                // Other errors - standard delay
-                                INITIAL_ERROR_DELAY_MS
-                            }
-                        }
-
-                        // Reset busy delay if we didn't hit a busy error
-                        if (error != SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
-                            currentBusyDelay = INITIAL_ERROR_DELAY_MS
-                        }
-
-                        serviceScope.launch {
-                            delay(delay)
-                            restartListening()
-                        }
-                    }
-
-                    override fun onResults(results: android.os.Bundle?) {
-                        isListening = false
-                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            processTranscriptChunk(matches[0])
-                        }
-                        if (isRecording) {
-                            serviceScope.launch {
-                                delay(ON_RESULTS_RESTART_DELAY_MS)
-                                restartListening()
-                            }
-                        }
-                    }
-
-                    override fun onPartialResults(partialResults: android.os.Bundle?) {}
-
-                    override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
-                })
-            }
-            startListening()
-        } else {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             Log.e("SessionService", "Speech recognition not available")
             stopSelf()
+            return
         }
+        usingOnDeviceRecognizer = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        Log.d("SessionService", "Creating recognizer (onDevice=$usingOnDeviceRecognizer)")
+        speechRecognizer = if (usingOnDeviceRecognizer)
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+        else
+            SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer?.setRecognitionListener(recognitionListener)
+        startListening()
+    }
+
+    private fun fallbackToStandardRecognizer() {
+        try { speechRecognizer?.destroy() } catch (_: Exception) {}
+        usingOnDeviceRecognizer = false
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer?.setRecognitionListener(recognitionListener)
+        isListening = false
+        startListening()
     }
 
     private fun startListening() {
@@ -145,7 +160,10 @@ class SessionService : Service() {
         }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
+            // BCP-47 (hyphen). Locale.toString gives "en_IN" with underscore which some
+            // OEM recognizers reject — toLanguageTag emits "en-IN".
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.ENGLISH.toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, Locale.ENGLISH.toLanguageTag())
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
 
             // Adjust silence parameters to reduce frequency of restarts during brief pauses
