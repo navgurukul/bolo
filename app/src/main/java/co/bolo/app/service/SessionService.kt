@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Binder
 import android.os.IBinder
 import android.speech.RecognitionListener
@@ -42,8 +43,10 @@ class SessionService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
     private var isListening = false
-    private var isRecording = false
+    @Volatile private var isRecording = false
     private var currentBusyDelay = INITIAL_ERROR_DELAY_MS
+
+    private var savedMusicVolume: Int = -1
 
     inner class LocalBinder : Binder() {
         fun getService(): SessionService = this@SessionService
@@ -56,6 +59,7 @@ class SessionService : Service() {
         dictionaryClassifier.initialize(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
+        muteRecognizerBeep()
         isRecording = true
         initSpeechRecognizer()
     }
@@ -73,7 +77,9 @@ class SessionService : Service() {
         override fun onError(error: Int) {
             Log.e("SessionService", "Speech recognition error: $error")
             isListening = false
-            if (!isRecording) return
+            // The recognizer fires onError after destroy() too — bail out if
+            // we've already torn the service down.
+            if (!isRecording || speechRecognizer == null) return
 
             val delay = when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
@@ -96,16 +102,15 @@ class SessionService : Service() {
 
         override fun onResults(results: android.os.Bundle?) {
             isListening = false
+            if (!isRecording || speechRecognizer == null) return
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             if (!matches.isNullOrEmpty()) {
                 Log.d("SessionService", "Got transcript chunk: ${matches[0]}")
                 processTranscriptChunk(matches[0])
             }
-            if (isRecording) {
-                serviceScope.launch {
-                    delay(ON_RESULTS_RESTART_DELAY_MS)
-                    restartListening()
-                }
+            serviceScope.launch {
+                delay(ON_RESULTS_RESTART_DELAY_MS)
+                restartListening()
             }
         }
 
@@ -125,6 +130,7 @@ class SessionService : Service() {
     }
 
     private fun startListening() {
+        if (!isRecording || speechRecognizer == null) return
         if (isListening) {
             Log.w("SessionService", "startListening called but already listening")
             return
@@ -152,7 +158,7 @@ class SessionService : Service() {
     }
 
     private fun restartListening() {
-        if (!isRecording) return
+        if (!isRecording || speechRecognizer == null) return
         try {
             speechRecognizer?.cancel()
         } catch (e: Exception) {
@@ -172,23 +178,67 @@ class SessionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         isRecording = true
         sessionManager.setRecording(true)
-        return START_STICKY
+        // START_NOT_STICKY: do not let the framework auto-restart this service
+        // after a kill. A re-spawned service with no UI in front of it would
+        // re-init the recognizer and play the "ready" tone on a loop with no
+        // way for the user to stop it.
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // User swiped Bolo from Recents. Tear down the recognizer immediately;
+        // on aggressive OEMs (Xiaomi/Vivo/Oppo) this is the only signal we get.
+        Log.d("SessionService", "Task removed — stopping service")
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
         isRecording = false
         isListening = false
         sessionManager.setRecording(false)
+        val recognizer = speechRecognizer
+        speechRecognizer = null
         try {
-            speechRecognizer?.destroy()
+            recognizer?.cancel()
+            recognizer?.destroy()
         } catch (e: Exception) {
             Log.e("SessionService", "Error destroying speech recognizer", e)
         }
-        serviceScope.launch {
-            delay(100)
-            serviceScope.coroutineContext[Job]?.cancel()
+        restoreRecognizerBeep()
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            Log.e("SessionService", "Error stopping foreground", e)
         }
+        serviceScope.coroutineContext[Job]?.cancel()
         super.onDestroy()
+    }
+
+    private fun muteRecognizerBeep() {
+        // Google Speech Services emits a "ready for input" tone on every
+        // SpeechRecognizer.startListening(). Bolo restarts the recognizer
+        // every few seconds, so without this the user hears a periodic beep
+        // throughout the session. The tone is routed through STREAM_MUSIC
+        // on most OEMs, which can be muted without DND permission.
+        val am = getSystemService(AUDIO_SERVICE) as? AudioManager ?: return
+        savedMusicVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        try {
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+        } catch (e: Exception) {
+            Log.w("SessionService", "Could not mute STREAM_MUSIC to suppress recognizer beep", e)
+        }
+    }
+
+    private fun restoreRecognizerBeep() {
+        if (savedMusicVolume < 0) return
+        val am = getSystemService(AUDIO_SERVICE) as? AudioManager ?: return
+        try {
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, savedMusicVolume, 0)
+        } catch (e: Exception) {
+            Log.w("SessionService", "Could not restore STREAM_MUSIC volume", e)
+        }
+        savedMusicVolume = -1
     }
 
     private fun createNotificationChannel() {

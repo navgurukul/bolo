@@ -26,8 +26,8 @@ android {
         applicationId = "co.bolo.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.3-trim"
+        versionCode = 5
+        versionName = "0.1.4-quiet"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         ksp {
