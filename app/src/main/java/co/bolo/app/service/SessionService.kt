@@ -13,9 +13,7 @@ import android.speech.SpeechRecognizer
 import android.util.Log
 import co.bolo.app.analysis.DictionaryClassifier
 import co.bolo.app.analysis.TranscriptAnalyzer
-import co.bolo.app.data.repo.RecognizerIssue
 import co.bolo.app.data.repo.SessionManager
-import android.os.Build
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +23,13 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
 
+/**
+ * Bolo uses the system network speech recognizer (Google Speech Services on
+ * almost every device). The recognizer runs in a separate process, takes the
+ * mic stream from us, ships audio to Google's backend, and returns text via
+ * onResults. Bolo keeps only the transcript text — no raw audio is ever
+ * written to disk on this device.
+ */
 @AndroidEntryPoint
 class SessionService : Service() {
 
@@ -39,7 +44,6 @@ class SessionService : Service() {
     private var isListening = false
     private var isRecording = false
     private var currentBusyDelay = INITIAL_ERROR_DELAY_MS
-    private var consecutiveErrors = 0
 
     inner class LocalBinder : Binder() {
         fun getService(): SessionService = this@SessionService
@@ -58,7 +62,7 @@ class SessionService : Service() {
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: android.os.Bundle?) {
-            Log.d("SessionService", "Ready for speech (onDevice)")
+            Log.d("SessionService", "Ready for speech")
             isListening = true
             currentBusyDelay = INITIAL_ERROR_DELAY_MS
         }
@@ -70,19 +74,6 @@ class SessionService : Service() {
             Log.e("SessionService", "Speech recognition error: $error")
             isListening = false
             if (!isRecording) return
-
-            // Bolo never falls back to the network recognizer — that would
-            // break the "audio stays on the phone" promise. If the on-device
-            // pack rejects English we abort the session and surface a UX
-            // prompt so the user can install the language pack.
-            if (error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
-                error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE) {
-                Log.w("SessionService", "On-device English pack missing — aborting session")
-                abortWithIssue(RecognizerIssue.LanguagePackMissing)
-                return
-            }
-
-            consecutiveErrors++
 
             val delay = when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
@@ -105,7 +96,6 @@ class SessionService : Service() {
 
         override fun onResults(results: android.os.Bundle?) {
             isListening = false
-            consecutiveErrors = 0
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             if (!matches.isNullOrEmpty()) {
                 Log.d("SessionService", "Got transcript chunk: ${matches[0]}")
@@ -124,26 +114,14 @@ class SessionService : Service() {
     }
 
     private fun initSpeechRecognizer() {
-        val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-        if (!canUseOnDevice) {
-            Log.e("SessionService", "On-device recognizer unavailable — refusing to start")
-            abortWithIssue(RecognizerIssue.NoOnDeviceSupport)
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Log.e("SessionService", "Speech recognition unavailable on this device — stopping")
+            stopSelf()
             return
         }
-        Log.d("SessionService", "Creating on-device recognizer")
-        speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         speechRecognizer?.setRecognitionListener(recognitionListener)
         startListening()
-    }
-
-    private fun abortWithIssue(issue: RecognizerIssue) {
-        sessionManager.reportRecognizerIssue(issue)
-        isRecording = false
-        isListening = false
-        try { speechRecognizer?.destroy() } catch (_: Exception) {}
-        speechRecognizer = null
-        stopSelf()
     }
 
     private fun startListening() {

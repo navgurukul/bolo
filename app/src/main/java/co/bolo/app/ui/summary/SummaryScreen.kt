@@ -349,7 +349,7 @@ fun SummaryScreen(
             })
             Spacer(Modifier.height(14.dp))
             BoloPrivacyNote(
-                "Counts saved. Words and audio were processed in memory and discarded — nothing is on disk you didn't see above."
+                "Counts saved. Speech went to Google's speech service for transcription; only the words you see above are stored on this phone — never the audio."
             )
             Spacer(Modifier.height(24.dp))
         }

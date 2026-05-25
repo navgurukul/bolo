@@ -46,7 +46,7 @@ fun ConsentScreen(
         Spacer(Modifier.height(24.dp))
         BoloCaption("Step 2 of 4 · How Bolo listens")
         Spacer(Modifier.height(10.dp))
-        BoloScreenTitle("We listen.\nWe don't remember.")
+        BoloScreenTitle("We listen.\nWe keep the words.")
         Spacer(Modifier.height(24.dp))
 
         PromiseRow(
@@ -55,9 +55,14 @@ fun ConsentScreen(
             sub = "It detects whether each speaker is using English or another language. That's it."
         )
         PromiseRow(
+            icon = "☁️",
+            title = "Speech goes to Google for transcription.",
+            sub = "Android's built-in speech service turns what's spoken into text. Google's privacy policy applies to that step."
+        )
+        PromiseRow(
             icon = "👻",
-            title = "No audio is ever saved.",
-            sub = "Sound is processed in memory and discarded. Nothing is written to disk."
+            title = "Bolo never saves the audio.",
+            sub = "Only the transcript and the English share are stored on this phone. No recordings, no uploads from Bolo to anywhere else."
         )
         PromiseRow(
             icon = "●",

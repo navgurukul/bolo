@@ -6,18 +6,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Surfaces the reason on-device recognition cannot run. Bolo refuses to fall
- * back to a network recognizer so the "audio never leaves the phone" promise
- * on the consent / mic / home screens stays literally true.
- */
-enum class RecognizerIssue {
-    /** Pre-Android-12 device, or OEM that ships no on-device recognizer at all. */
-    NoOnDeviceSupport,
-    /** On-device recognizer is present but the English voice-typing pack is not installed. */
-    LanguagePackMissing
-}
-
 @Singleton
 class SessionManager @Inject constructor() {
     private val _isRecording = MutableStateFlow(false)
@@ -31,9 +19,6 @@ class SessionManager @Inject constructor() {
 
     private val _activeSpeakerId = MutableStateFlow<String?>(null)
     val activeSpeakerId = _activeSpeakerId.asStateFlow()
-
-    private val _recognizerIssue = MutableStateFlow<RecognizerIssue?>(null)
-    val recognizerIssue = _recognizerIssue.asStateFlow()
 
     fun setActiveSpeaker(studentId: String?) {
         _activeSpeakerId.value = studentId
@@ -60,13 +45,5 @@ class SessionManager @Inject constructor() {
             _chunks.value = emptyList()
             _activeSpeakerId.value = null
         }
-    }
-
-    fun reportRecognizerIssue(issue: RecognizerIssue) {
-        _recognizerIssue.value = issue
-    }
-
-    fun clearRecognizerIssue() {
-        _recognizerIssue.value = null
     }
 }

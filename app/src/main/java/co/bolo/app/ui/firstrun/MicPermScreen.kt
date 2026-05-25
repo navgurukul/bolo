@@ -94,7 +94,7 @@ fun MicPermScreen(
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "Bolo needs the mic to detect English vs. other languages during sessions. Audio is processed in memory and never saved.",
+                "Bolo needs the mic so it can send speech to Google's speech service for transcription. Bolo keeps only the resulting text — no audio is stored on this phone.",
                 color = BoloPalette.InkMuted,
                 style = MaterialTheme.typography.bodyMedium
             )

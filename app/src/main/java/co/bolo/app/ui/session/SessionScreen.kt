@@ -1,9 +1,7 @@
 package co.bolo.app.ui.session
 
 import android.Manifest
-import android.content.Intent
 import android.os.Build
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -48,10 +46,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import co.bolo.app.data.repo.RecognizerIssue
 import co.bolo.app.ui.components.BoloAvatar
 import co.bolo.app.ui.components.BoloCaption
-import co.bolo.app.ui.components.BoloGhostButton
 import co.bolo.app.ui.components.BoloItalicAccent
 import co.bolo.app.ui.components.BoloQuietButton
 import co.bolo.app.ui.components.BoloSolidButton
@@ -95,70 +91,6 @@ fun SessionScreen(
             launcher.launch(permissions.toTypedArray())
         }
         SessionUiState.Phase.Running, SessionUiState.Phase.Ending -> Recording(state, vm, onEnd)
-    }
-
-    val issue = state.recognizerIssue
-    if (issue != null) {
-        RecognizerIssueDialog(
-            issue = issue,
-            onOpenSettings = {
-                val intent = Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                runCatching { context.startActivity(intent) }
-            },
-            onDismiss = {
-                vm.dismissRecognizerIssue()
-                onCancel()
-            }
-        )
-    }
-}
-
-@Composable
-private fun RecognizerIssueDialog(
-    issue: RecognizerIssue,
-    onOpenSettings: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val title: String
-    val body: String
-    when (issue) {
-        RecognizerIssue.NoOnDeviceSupport -> {
-            title = "On-device speech not available"
-            body = "Bolo only listens on the phone — no audio ever leaves it. " +
-                "This device doesn't ship an on-device English recognizer, so sessions can't start. " +
-                "Android 12 or newer with Google's on-device voice pack is required."
-        }
-        RecognizerIssue.LanguagePackMissing -> {
-            title = "Install the English voice pack"
-            body = "Bolo listens on the phone only — no audio is sent to Google or any server. " +
-                "To do that, Android needs the English on-device speech pack installed. " +
-                "Open voice input settings and download English under “On-device speech recognition”, " +
-                "then come back and start the session."
-        }
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BoloPalette.Ink.copy(alpha = 0.55f))
-            .clickable(enabled = false) { },
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .width(320.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(BoloPalette.Surface)
-                .padding(26.dp)
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
-            Spacer(Modifier.height(10.dp))
-            Text(body, style = MaterialTheme.typography.bodyMedium, color = BoloPalette.InkMuted)
-            Spacer(Modifier.height(20.dp))
-            BoloSolidButton("Open voice input settings", onClick = onOpenSettings)
-            Spacer(Modifier.height(8.dp))
-            BoloGhostButton("Back", onClick = onDismiss)
-        }
     }
 }
 
@@ -241,7 +173,7 @@ private fun TopicPicker(
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "No audio leaves this phone. The mic light stays on whenever we're listening.",
+            "Speech is sent to Google for transcription. Bolo keeps only the text. The mic light stays on whenever we're listening.",
             style = MaterialTheme.typography.bodySmall,
             color = BoloPalette.InkFaint,
             textAlign = TextAlign.Center,

@@ -208,7 +208,7 @@ fun HomeScreen(
             item {
                 Spacer(Modifier.height(16.dp))
                 BoloPrivacyNote(
-                    "Bolo never records or stores audio. It listens, classifies, and forgets — in real time."
+                    "Speech is transcribed by Google's speech service. Bolo keeps the transcript and the English share — never the audio."
                 )
             }
         }
