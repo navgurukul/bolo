@@ -10,9 +10,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import co.bolo.app.data.seed.Seed
 import co.bolo.app.ui.attendance.AddStudentScreen
 import co.bolo.app.ui.attendance.AttendanceScreen
+import co.bolo.app.ui.cohort.CohortPickerScreen
 import co.bolo.app.ui.cohort.NewCohortScreen
 import co.bolo.app.ui.dashboard.DashboardScreen
 import co.bolo.app.ui.enrollment.EnrollmentScreen
@@ -41,6 +41,7 @@ object Routes {
 
     const val HOME = "home"
     const val NEW_COHORT = "cohort/new"
+    const val PICK_COHORT_FOR_ROSTER = "cohort/pick_for_roster"
     const val ENROLL = "enroll/{cohortId}/{studentId}"
     // Attendance is now the session entry-point — replaces the
     // ad-hoc participant-count and name-edit screens.
@@ -266,9 +267,20 @@ fun BoloNavHost() {
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onBack = { nav.popBackStack() },
-                    onManageStudents = { nav.navigate(Routes.attendanceForRoster(Seed.DEFAULT_COHORT_ID)) },
+                    onManageStudents = { nav.navigate(Routes.PICK_COHORT_FOR_ROSTER) },
                     onOpenSync = { nav.navigate(Routes.SYNC) },
                     onForgetVoice = { nav.navigate(Routes.FORGET_VOICE) }
+                )
+            }
+            composable(Routes.PICK_COHORT_FOR_ROSTER) {
+                CohortPickerScreen(
+                    onBack = { nav.popBackStack() },
+                    onPick = { id ->
+                        nav.navigate(Routes.attendanceForRoster(id)) {
+                            popUpTo(Routes.PICK_COHORT_FOR_ROSTER) { inclusive = true }
+                        }
+                    },
+                    onNewCohort = { nav.navigate(Routes.NEW_COHORT) }
                 )
             }
             composable(Routes.FORGET_VOICE) {
