@@ -14,6 +14,7 @@ import android.util.Log
 import co.bolo.app.analysis.DictionaryClassifier
 import co.bolo.app.analysis.TranscriptAnalyzer
 import co.bolo.app.data.repo.SessionManager
+import android.os.Build
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,10 @@ class SessionService : Service() {
     private var speechRecognizer: SpeechRecognizer? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
+    private var isListening = false
+    private var isRecording = false
+    private var currentBusyDelay = INITIAL_ERROR_DELAY_MS
+
     inner class LocalBinder : Binder() {
         fun getService(): SessionService = this@SessionService
     }
@@ -45,15 +50,28 @@ class SessionService : Service() {
         dictionaryClassifier.initialize(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
+        isRecording = true
         initSpeechRecognizer()
     }
 
     private fun initSpeechRecognizer() {
         if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+            val recognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+            ) {
+                Log.d("SessionService", "Creating on-device speech recognizer")
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+            } else {
+                Log.d("SessionService", "Creating standard speech recognizer")
+                SpeechRecognizer.createSpeechRecognizer(this)
+            }
+
+            speechRecognizer = recognizer.apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: android.os.Bundle?) {
                         Log.d("SessionService", "Ready for speech")
+                        isListening = true
+                        currentBusyDelay = INITIAL_ERROR_DELAY_MS
                     }
                     override fun onBeginningOfSpeech() {}
                     override fun onRmsChanged(rmsdB: Float) {}
@@ -61,21 +79,54 @@ class SessionService : Service() {
                     override fun onEndOfSpeech() {}
                     override fun onError(error: Int) {
                         Log.e("SessionService", "Speech recognition error: $error")
+                        isListening = false
+
+                        if (!isRecording) return
+
+                        val delay = when (error) {
+                            SpeechRecognizer.ERROR_NO_MATCH,
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                                // Silence/timeout - restart quickly to minimize mic dot flicker
+                                MIN_RESTART_DELAY_MS
+                            }
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                                // Busy error - use and double the backoff delay
+                                val d = currentBusyDelay
+                                currentBusyDelay = (currentBusyDelay * 2).coerceAtMost(MAX_ERROR_DELAY_MS)
+                                d
+                            }
+                            else -> {
+                                // Other errors - standard delay
+                                INITIAL_ERROR_DELAY_MS
+                            }
+                        }
+
+                        // Reset busy delay if we didn't hit a busy error
+                        if (error != SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                            currentBusyDelay = INITIAL_ERROR_DELAY_MS
+                        }
+
                         serviceScope.launch {
-                            delay(500)
-                            startListening()
+                            delay(delay)
+                            restartListening()
                         }
                     }
 
                     override fun onResults(results: android.os.Bundle?) {
+                        isListening = false
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         if (!matches.isNullOrEmpty()) {
                             processTranscriptChunk(matches[0])
                         }
-                        startListening()
+                        if (isRecording) {
+                            serviceScope.launch {
+                                delay(ON_RESULTS_RESTART_DELAY_MS)
+                                restartListening()
+                            }
+                        }
                     }
 
-                    override fun onPartialResults(partialResults: android.os.Bundle?) { }
+                    override fun onPartialResults(partialResults: android.os.Bundle?) {}
 
                     override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
                 })
@@ -88,12 +139,38 @@ class SessionService : Service() {
     }
 
     private fun startListening() {
+        if (isListening) {
+            Log.w("SessionService", "startListening called but already listening")
+            return
+        }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+
+            // Adjust silence parameters to reduce frequency of restarts during brief pauses
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 5000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 5000L)
         }
-        speechRecognizer?.startListening(intent)
+        try {
+            isListening = true
+            speechRecognizer?.startListening(intent)
+        } catch (e: Exception) {
+            Log.e("SessionService", "Failed to start listening", e)
+            isListening = false
+        }
+    }
+
+    private fun restartListening() {
+        if (!isRecording) return
+        try {
+            speechRecognizer?.cancel()
+        } catch (e: Exception) {
+            Log.e("SessionService", "Error calling cancel() on speech recognizer", e)
+        }
+        isListening = false
+        startListening()
     }
 
     private fun processTranscriptChunk(chunk: String) {
@@ -104,13 +181,20 @@ class SessionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        isRecording = true
         sessionManager.setRecording(true)
         return START_STICKY
     }
 
     override fun onDestroy() {
+        isRecording = false
+        isListening = false
         sessionManager.setRecording(false)
-        speechRecognizer?.destroy()
+        try {
+            speechRecognizer?.destroy()
+        } catch (e: Exception) {
+            Log.e("SessionService", "Error destroying speech recognizer", e)
+        }
         serviceScope.launch {
             delay(100)
             serviceScope.coroutineContext[Job]?.cancel()
@@ -140,5 +224,10 @@ class SessionService : Service() {
     companion object {
         private const val CHANNEL_ID = "session_channel"
         private const val NOTIFICATION_ID = 1
+
+        private const val MIN_RESTART_DELAY_MS = 50L
+        private const val ON_RESULTS_RESTART_DELAY_MS = 150L
+        private const val INITIAL_ERROR_DELAY_MS = 500L
+        private const val MAX_ERROR_DELAY_MS = 4000L
     }
 }
