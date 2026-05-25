@@ -3,7 +3,6 @@ package co.bolo.app.ui.history
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,30 +16,32 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import co.bolo.app.ui.components.BOLO_HISTORY
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.bolo.app.data.model.Session
 import co.bolo.app.ui.components.BoloCaption
 import co.bolo.app.ui.components.BoloCard
-import co.bolo.app.ui.components.BoloDelta
-import co.bolo.app.ui.components.BoloGhostButton
 import co.bolo.app.ui.components.BoloScreenTitle
 import co.bolo.app.ui.components.BoloTopBar
 import co.bolo.app.ui.components.Hairline
-import co.bolo.app.ui.components.MockHistorySession
 import co.bolo.app.ui.theme.BoloPalette
 import co.bolo.app.ui.theme.MonoData
 import co.bolo.app.ui.theme.SansUI
+import co.bolo.app.util.Format
 
 @Composable
 fun HistoryScreen(
     onBack: () -> Unit,
-    onOpenSession: (id: String) -> Unit
+    onOpenSession: (id: String) -> Unit,
+    vm: HistoryViewModel = hiltViewModel()
 ) {
-    val median = BOLO_HISTORY.sumOf { it.pct } / BOLO_HISTORY.size
+    val state by vm.state.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier
@@ -52,54 +53,59 @@ fun HistoryScreen(
         item {
             BoloTopBar(label = "Session history", onBack = onBack)
             Spacer(Modifier.height(18.dp))
-            BoloScreenTitle("Last 6 sessions.")
+            BoloScreenTitle(
+                if (state.sessions.isEmpty()) "No sessions yet."
+                else "${state.sessions.size} session" +
+                    if (state.sessions.size == 1) "." else "s."
+            )
             Spacer(Modifier.height(22.dp))
-            BoloCard {
-                Column {
-                    BoloCaption("This week vs. last")
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.Bottom) {
+            if (state.sessions.isNotEmpty()) {
+                BoloCard {
+                    Column {
+                        BoloCaption("Median English share")
+                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                "${state.medianSharePct}",
+                                color = BoloPalette.Ink,
+                                fontFamily = SansUI,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 56.sp,
+                                letterSpacing = (-1.8).sp
+                            )
+                            Text(
+                                "%",
+                                color = BoloPalette.InkFaint,
+                                fontFamily = SansUI,
+                                fontSize = 22.sp,
+                                modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
                         Text(
-                            "$median",
-                            color = BoloPalette.Ink,
-                            fontFamily = SansUI,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 56.sp,
-                            letterSpacing = (-1.8).sp
-                        )
-                        Text(
-                            "%",
+                            "across ${state.sessions.size} session" +
+                                if (state.sessions.size == 1) "" else "s",
                             color = BoloPalette.InkFaint,
-                            fontFamily = SansUI,
-                            fontSize = 22.sp,
-                            modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
+                            style = MaterialTheme.typography.bodySmall
                         )
-                        Spacer(Modifier.padding(start = 14.dp))
-                        BoloDelta(value = 7)
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "median English share across the cohort",
-                        color = BoloPalette.InkFaint,
-                        style = MaterialTheme.typography.bodySmall
-                    )
                 }
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(24.dp))
         }
-        items(BOLO_HISTORY, key = { it.id }) { s ->
+        items(state.sessions, key = { it.id }) { s ->
             HistoryRow(s, onClick = { onOpenSession(s.id) })
         }
         item {
-            Spacer(Modifier.height(22.dp))
-            BoloGhostButton("Export this month as CSV", onClick = { })
             Spacer(Modifier.height(40.dp))
         }
     }
 }
 
 @Composable
-private fun HistoryRow(s: MockHistorySession, onClick: () -> Unit) {
+private fun HistoryRow(s: Session, onClick: () -> Unit) {
+    val durationMs = (s.endedAt ?: s.startedAt) - s.startedAt
+    val pct = (s.englishShare * 100f).toInt()
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -110,7 +116,7 @@ private fun HistoryRow(s: MockHistorySession, onClick: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    s.date.uppercase(),
+                    Format.relativeDay(s.startedAt).uppercase(),
                     color = BoloPalette.InkFaint,
                     fontFamily = MonoData,
                     fontSize = 10.5.sp,
@@ -120,14 +126,14 @@ private fun HistoryRow(s: MockHistorySession, onClick: () -> Unit) {
                 Text(s.topic, color = BoloPalette.Ink, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "${s.duration} min · ${s.students} students · top: ${s.top}",
+                    Format.minutes(durationMs),
                     color = BoloPalette.InkFaint,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    "${s.pct}",
+                    "$pct",
                     color = BoloPalette.Ink,
                     fontFamily = SansUI,
                     fontWeight = FontWeight.Normal,

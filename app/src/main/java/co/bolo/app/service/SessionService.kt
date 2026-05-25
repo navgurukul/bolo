@@ -13,6 +13,7 @@ import android.speech.SpeechRecognizer
 import android.util.Log
 import co.bolo.app.analysis.DictionaryClassifier
 import co.bolo.app.analysis.TranscriptAnalyzer
+import co.bolo.app.data.repo.RecognizerIssue
 import co.bolo.app.data.repo.SessionManager
 import android.os.Build
 import dagger.hilt.android.AndroidEntryPoint
@@ -38,8 +39,6 @@ class SessionService : Service() {
     private var isListening = false
     private var isRecording = false
     private var currentBusyDelay = INITIAL_ERROR_DELAY_MS
-    private var usingOnDeviceRecognizer = false
-    private var fellBackToStandard = false
     private var consecutiveErrors = 0
 
     inner class LocalBinder : Binder() {
@@ -59,7 +58,7 @@ class SessionService : Service() {
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: android.os.Bundle?) {
-            Log.d("SessionService", "Ready for speech (onDevice=$usingOnDeviceRecognizer)")
+            Log.d("SessionService", "Ready for speech (onDevice)")
             isListening = true
             currentBusyDelay = INITIAL_ERROR_DELAY_MS
         }
@@ -68,21 +67,18 @@ class SessionService : Service() {
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {}
         override fun onError(error: Int) {
-            Log.e("SessionService", "Speech recognition error: $error (onDevice=$usingOnDeviceRecognizer)")
+            Log.e("SessionService", "Speech recognition error: $error")
             isListening = false
             if (!isRecording) return
 
-            val unrecoverable = error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
-                error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ||
-                error == SpeechRecognizer.ERROR_CLIENT
-            val tooManyTimeouts = (error == SpeechRecognizer.ERROR_NO_MATCH ||
-                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) && consecutiveErrors >= 5
-
-            if (usingOnDeviceRecognizer && !fellBackToStandard && (unrecoverable || tooManyTimeouts)) {
-                Log.w("SessionService", "On-device recognizer failing — falling back to standard network recognizer")
-                fellBackToStandard = true
-                consecutiveErrors = 0
-                serviceScope.launch { fallbackToStandardRecognizer() }
+            // Bolo never falls back to the network recognizer — that would
+            // break the "audio stays on the phone" promise. If the on-device
+            // pack rejects English we abort the session and surface a UX
+            // prompt so the user can install the language pack.
+            if (error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+                error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE) {
+                Log.w("SessionService", "On-device English pack missing — aborting session")
+                abortWithIssue(RecognizerIssue.LanguagePackMissing)
                 return
             }
 
@@ -128,29 +124,26 @@ class SessionService : Service() {
     }
 
     private fun initSpeechRecognizer() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            Log.e("SessionService", "Speech recognition not available")
-            stopSelf()
+        val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        if (!canUseOnDevice) {
+            Log.e("SessionService", "On-device recognizer unavailable — refusing to start")
+            abortWithIssue(RecognizerIssue.NoOnDeviceSupport)
             return
         }
-        usingOnDeviceRecognizer = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-        Log.d("SessionService", "Creating recognizer (onDevice=$usingOnDeviceRecognizer)")
-        speechRecognizer = if (usingOnDeviceRecognizer)
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-        else
-            SpeechRecognizer.createSpeechRecognizer(this)
+        Log.d("SessionService", "Creating on-device recognizer")
+        speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
         speechRecognizer?.setRecognitionListener(recognitionListener)
         startListening()
     }
 
-    private fun fallbackToStandardRecognizer() {
-        try { speechRecognizer?.destroy() } catch (_: Exception) {}
-        usingOnDeviceRecognizer = false
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-        speechRecognizer?.setRecognitionListener(recognitionListener)
+    private fun abortWithIssue(issue: RecognizerIssue) {
+        sessionManager.reportRecognizerIssue(issue)
+        isRecording = false
         isListening = false
-        startListening()
+        try { speechRecognizer?.destroy() } catch (_: Exception) {}
+        speechRecognizer = null
+        stopSelf()
     }
 
     private fun startListening() {

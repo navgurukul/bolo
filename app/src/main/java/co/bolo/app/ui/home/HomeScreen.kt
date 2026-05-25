@@ -43,8 +43,8 @@ fun HomeScreen(
     onOpenDashboard: (studentId: String) -> Unit,
     onEnroll: (cohortId: String, studentId: String) -> Unit,
     onOpenSession: (sessionId: String) -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenHistory: (cohortId: String?) -> Unit,
+    onOpenSettings: (cohortId: String?) -> Unit,
     onNewCohort: () -> Unit = {},
     vm: HomeViewModel = hiltViewModel()
 ) {
@@ -194,14 +194,14 @@ fun HomeScreen(
                     state.students.firstOrNull()?.let { onOpenDashboard(it.id) }
                 })
                 Hairline()
-                HomeLink(label = "Past sessions", hint = "6 this month", onClick = onOpenHistory)
+                HomeLink(label = "Past sessions", onClick = { onOpenHistory(cohortId) })
                 Hairline()
                 HomeLink(label = "Enroll a new voice", onClick = {
                     val cid = cohortId ?: return@HomeLink
                     state.students.firstOrNull()?.let { onEnroll(cid, it.id) }
                 })
                 Hairline()
-                HomeLink(label = "Settings", onClick = onOpenSettings)
+                HomeLink(label = "Settings", onClick = { onOpenSettings(cohortId) })
                 Hairline()
             }
 

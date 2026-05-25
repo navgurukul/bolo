@@ -67,6 +67,10 @@ object Routes {
     fun summary(sessionId: String) = "summary/$sessionId"
     fun dashboard(studentId: String) = "dashboard/$studentId"
     fun sessionDetail(id: String) = "session_detail/$id"
+    fun history(cohortId: String?) =
+        if (cohortId.isNullOrEmpty()) HISTORY else "$HISTORY?cohortId=$cohortId"
+    fun settings(cohortId: String?) =
+        if (cohortId.isNullOrEmpty()) SETTINGS else "$SETTINGS?cohortId=$cohortId"
 }
 
 @Composable
@@ -116,8 +120,8 @@ fun BoloNavHost() {
                     onOpenDashboard = { studentId -> nav.navigate(Routes.dashboard(studentId)) },
                     onEnroll = { cohortId, studentId -> nav.navigate(Routes.enroll(cohortId, studentId)) },
                     onOpenSession = { sessionId -> nav.navigate(Routes.summary(sessionId)) },
-                    onOpenHistory = { nav.navigate(Routes.HISTORY) },
-                    onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                    onOpenHistory = { cohortId -> nav.navigate(Routes.history(cohortId)) },
+                    onOpenSettings = { cohortId -> nav.navigate(Routes.settings(cohortId)) },
                     onNewCohort = { nav.navigate(Routes.NEW_COHORT) }
                 )
             }
@@ -249,7 +253,16 @@ fun BoloNavHost() {
                 )
             }
 
-            composable(Routes.HISTORY) {
+            composable(
+                route = Routes.HISTORY + "?cohortId={cohortId}",
+                arguments = listOf(
+                    navArgument("cohortId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) {
                 HistoryScreen(
                     onBack = { nav.popBackStack() },
                     onOpenSession = { id -> nav.navigate(Routes.sessionDetail(id)) }
@@ -264,7 +277,16 @@ fun BoloNavHost() {
                     onBack = { nav.popBackStack() }
                 )
             }
-            composable(Routes.SETTINGS) {
+            composable(
+                route = Routes.SETTINGS + "?cohortId={cohortId}",
+                arguments = listOf(
+                    navArgument("cohortId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) {
                 SettingsScreen(
                     onBack = { nav.popBackStack() },
                     onManageStudents = { nav.navigate(Routes.PICK_COHORT_FOR_ROSTER) },

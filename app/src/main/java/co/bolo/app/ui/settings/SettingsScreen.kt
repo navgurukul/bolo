@@ -2,7 +2,6 @@ package co.bolo.app.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,6 +30,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.verticalScroll
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.bolo.app.BuildConfig
 import co.bolo.app.ui.components.BoloScreenTitle
 import co.bolo.app.ui.components.BoloSectionLabel
 import co.bolo.app.ui.components.BoloTopBar
@@ -43,8 +45,10 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onManageStudents: () -> Unit,
     onOpenSync: () -> Unit,
-    onForgetVoice: () -> Unit
+    onForgetVoice: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel()
 ) {
+    val state by vm.state.collectAsStateWithLifecycle()
     var ringOn by remember { mutableStateOf(true) }
     var vibrOn by remember { mutableStateOf(false) }
     var topicReminder by remember { mutableStateOf(true) }
@@ -62,12 +66,10 @@ fun SettingsScreen(
         Spacer(Modifier.height(24.dp))
 
         BoloSectionLabel("Cohort")
-        SettingRow(label = "Cohort name", value = "Pune · Batch 14")
-        SettingRow(label = "Program code", value = "NGK-7T4P", mono = true)
-        SettingRow(label = "Facilitator", value = "Anjali")
+        SettingRow(label = "Cohort name", value = state.cohort?.name ?: "No cohort yet")
         SettingRow(
             label = "Manage students",
-            value = "6 enrolled",
+            value = "${state.studentCount} enrolled",
             chevron = true,
             onClick = onManageStudents
         )
@@ -95,8 +97,7 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(24.dp))
         BoloSectionLabel("Sync")
-        SettingRow(label = "Last sync", value = "2 minutes ago", chevron = true, onClick = onOpenSync)
-        SettingRow(label = "Only sync on WiFi", value = "On")
+        SettingRow(label = "Sync settings", value = "", chevron = true, onClick = onOpenSync)
 
         Spacer(Modifier.height(24.dp))
         BoloSectionLabel("Privacy")
@@ -112,7 +113,11 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(24.dp))
         BoloSectionLabel("About")
-        SettingRow(label = "Version", value = "0.1.4 · build 207", mono = true)
+        SettingRow(
+            label = "Version",
+            value = "${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}",
+            mono = true
+        )
         SettingRow(label = "Acknowledgements", value = "", chevron = true)
 
         Spacer(Modifier.height(28.dp))

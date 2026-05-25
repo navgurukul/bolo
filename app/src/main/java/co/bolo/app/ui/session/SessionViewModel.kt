@@ -2,6 +2,8 @@ package co.bolo.app.ui.session
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.speech.SpeechRecognizer
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +13,7 @@ import co.bolo.app.data.model.SpeakerStat
 import co.bolo.app.data.model.Student
 import co.bolo.app.data.model.TranscriptChunk
 import co.bolo.app.data.repo.CohortRepo
+import co.bolo.app.data.repo.RecognizerIssue
 import co.bolo.app.data.repo.SessionManager
 import co.bolo.app.data.repo.SessionRepo
 import co.bolo.app.service.SessionService
@@ -41,7 +44,8 @@ data class SessionUiState(
     val chunks: List<ChunkAnalysis> = emptyList(),
     val showDebugTranscript: Boolean = false,
     val activeSpeakerId: String? = null,
-    val studentSpeechMs: Map<String, Long> = emptyMap()
+    val studentSpeechMs: Map<String, Long> = emptyMap(),
+    val recognizerIssue: RecognizerIssue? = null
 ) {
     enum class Phase { PickingTopic, Running, Ending }
 }
@@ -104,6 +108,24 @@ class SessionViewModel @Inject constructor(
                 _state.value = _state.value.copy(activeSpeakerId = activeId)
             }
         }
+
+        viewModelScope.launch {
+            sessionManager.recognizerIssue.collect { issue ->
+                _state.value = _state.value.copy(recognizerIssue = issue)
+                if (issue != null) {
+                    timerJob?.cancel()
+                    _state.value = _state.value.copy(phase = SessionUiState.Phase.PickingTopic)
+                }
+            }
+        }
+    }
+
+    private fun onDeviceRecognizerSupported(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+
+    fun dismissRecognizerIssue() {
+        sessionManager.clearRecognizerIssue()
     }
 
     fun onPermissionResult(granted: Boolean) {
@@ -124,6 +146,11 @@ class SessionViewModel @Inject constructor(
     }
 
     fun start() {
+        if (!onDeviceRecognizerSupported()) {
+            sessionManager.reportRecognizerIssue(RecognizerIssue.NoOnDeviceSupport)
+            return
+        }
+        sessionManager.clearRecognizerIssue()
         val topic = resolvedTopic().ifBlank { "Free talk" }
         sessionId = UUID.randomUUID().toString()
         startedAt = System.currentTimeMillis()
