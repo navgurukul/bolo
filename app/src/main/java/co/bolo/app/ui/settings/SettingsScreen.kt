@@ -44,8 +44,6 @@ import co.bolo.app.ui.theme.MonoData
 fun SettingsScreen(
     onBack: () -> Unit,
     onManageStudents: () -> Unit,
-    onOpenSync: () -> Unit,
-    onForgetVoice: () -> Unit,
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -96,29 +94,12 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(24.dp))
-        BoloSectionLabel("Sync")
-        SettingRow(label = "Sync settings", value = "", chevron = true, onClick = onOpenSync)
-
-        Spacer(Modifier.height(24.dp))
-        BoloSectionLabel("Privacy")
-        SettingRow(
-            label = "Forget my voice",
-            value = "",
-            chevron = true,
-            danger = true,
-            onClick = onForgetVoice
-        )
-        SettingRow(label = "Export my data", value = "", chevron = true)
-        SettingRow(label = "Privacy policy", value = "", chevron = true)
-
-        Spacer(Modifier.height(24.dp))
         BoloSectionLabel("About")
         SettingRow(
             label = "Version",
             value = "${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}",
             mono = true
         )
-        SettingRow(label = "Acknowledgements", value = "", chevron = true)
 
         Spacer(Modifier.height(28.dp))
         Text(

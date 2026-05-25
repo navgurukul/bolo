@@ -41,7 +41,6 @@ import co.bolo.app.ui.theme.MonoData
 fun HomeScreen(
     onStartSession: (cohortId: String) -> Unit,
     onOpenDashboard: (studentId: String) -> Unit,
-    onEnroll: (cohortId: String, studentId: String) -> Unit,
     onOpenSession: (sessionId: String) -> Unit,
     onOpenHistory: (cohortId: String?) -> Unit,
     onOpenSettings: (cohortId: String?) -> Unit,
@@ -181,8 +180,7 @@ fun HomeScreen(
                 items(state.students, key = { it.id }) { stu ->
                     StudentRow(
                         student = stu,
-                        onOpenDashboard = onOpenDashboard,
-                        onEnroll = { onEnroll(stu.cohortId, stu.id) }
+                        onOpenDashboard = onOpenDashboard
                     )
                 }
             }
@@ -195,11 +193,6 @@ fun HomeScreen(
                 })
                 Hairline()
                 HomeLink(label = "Past sessions", onClick = { onOpenHistory(cohortId) })
-                Hairline()
-                HomeLink(label = "Enroll a new voice", onClick = {
-                    val cid = cohortId ?: return@HomeLink
-                    state.students.firstOrNull()?.let { onEnroll(cid, it.id) }
-                })
                 Hairline()
                 HomeLink(label = "Settings", onClick = { onOpenSettings(cohortId) })
                 Hairline()
@@ -285,10 +278,8 @@ private fun EmptyState(label: String, onStart: () -> Unit) {
 @Composable
 private fun StudentRow(
     student: Student,
-    onOpenDashboard: (String) -> Unit,
-    onEnroll: () -> Unit
+    onOpenDashboard: (String) -> Unit
 ) {
-    val enrolled = student.enrolledAt != null
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -303,22 +294,9 @@ private fun StudentRow(
         Column(modifier = Modifier.padding(end = 12.dp)) {
             Text(student.displayName, style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
             Text(
-                if (enrolled) "Voice enrolled · tap for trend"
-                else "Tap to enroll voice",
+                "Tap for trend",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (enrolled) BoloPalette.SageDeep else BoloPalette.InkFaint
-            )
-        }
-        if (!enrolled) {
-            Text(
-                "Enroll",
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(BoloPalette.SageSoft)
-                    .clickable(onClick = onEnroll)
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                color = BoloPalette.SageDeep,
-                style = MaterialTheme.typography.labelLarge
+                color = BoloPalette.InkFaint
             )
         }
     }

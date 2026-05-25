@@ -25,7 +25,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.bolo.app.ui.components.BoloCaption
-import co.bolo.app.ui.components.BoloQuietButton
 import co.bolo.app.ui.components.BoloScreenTitle
 import co.bolo.app.ui.components.BoloSolidButton
 import co.bolo.app.ui.components.Hairline
@@ -33,8 +32,7 @@ import co.bolo.app.ui.theme.BoloPalette
 
 @Composable
 fun ConsentScreen(
-    onContinue: () -> Unit,
-    onReadPolicy: () -> Unit = {}
+    onContinue: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -69,16 +67,9 @@ fun ConsentScreen(
             title = "A red dot stays visible when the mic is on.",
             sub = "Always. Even if the screen dims. No surprises."
         )
-        PromiseRow(
-            icon = "🔒",
-            title = "Your voice fingerprint lives only on this phone.",
-            sub = "Encrypted at rest. Wipe it any time with one tap."
-        )
 
         Spacer(Modifier.height(28.dp))
         BoloSolidButton("I understand — continue", onClick = onContinue)
-        Spacer(Modifier.height(10.dp))
-        BoloQuietButton("Read the full policy", onClick = onReadPolicy)
     }
 }
 

@@ -49,9 +49,6 @@ interface StudentDao {
 
     @Query("DELETE FROM students WHERE id = :id")
     suspend fun delete(id: String)
-
-    @Query("UPDATE students SET voiceEmbedding = NULL, enrolledAt = NULL WHERE id = :id")
-    suspend fun forgetVoice(id: String)
 }
 
 @Dao

@@ -15,7 +15,6 @@ import co.bolo.app.ui.attendance.AttendanceScreen
 import co.bolo.app.ui.cohort.CohortPickerScreen
 import co.bolo.app.ui.cohort.NewCohortScreen
 import co.bolo.app.ui.dashboard.DashboardScreen
-import co.bolo.app.ui.enrollment.EnrollmentScreen
 import co.bolo.app.ui.firstrun.CohortSetupScreen
 import co.bolo.app.ui.firstrun.ConsentScreen
 import co.bolo.app.ui.firstrun.MicPermScreen
@@ -25,9 +24,7 @@ import co.bolo.app.ui.history.HistoryScreen
 import co.bolo.app.ui.history.SessionDetailScreen
 import co.bolo.app.ui.home.HomeScreen
 import co.bolo.app.ui.session.SessionScreen
-import co.bolo.app.ui.settings.ForgetVoiceScreen
 import co.bolo.app.ui.settings.SettingsScreen
-import co.bolo.app.ui.settings.SyncScreen
 import co.bolo.app.ui.summary.SummaryScreen
 import co.bolo.app.ui.theme.BoloPalette
 import co.bolo.app.util.Prefs
@@ -42,9 +39,6 @@ object Routes {
     const val HOME = "home"
     const val NEW_COHORT = "cohort/new"
     const val PICK_COHORT_FOR_ROSTER = "cohort/pick_for_roster"
-    const val ENROLL = "enroll/{cohortId}/{studentId}"
-    // Attendance is now the session entry-point — replaces the
-    // ad-hoc participant-count and name-edit screens.
     const val ATTENDANCE_FOR_SESSION = "attendance/session/{cohortId}"
     const val ATTENDANCE_FOR_ROSTER = "attendance/roster/{cohortId}"
     const val ADD_STUDENT = "add_student/{cohortId}"
@@ -56,10 +50,7 @@ object Routes {
     const val HISTORY = "history"
     const val SESSION_DETAIL = "session_detail/{id}"
     const val SETTINGS = "settings"
-    const val FORGET_VOICE = "forget_voice"
-    const val SYNC = "sync"
 
-    fun enroll(cohortId: String, studentId: String) = "enroll/$cohortId/$studentId"
     fun attendanceForSession(cohortId: String) = "attendance/session/$cohortId"
     fun attendanceForRoster(cohortId: String) = "attendance/roster/$cohortId"
     fun addStudent(cohortId: String) = "add_student/$cohortId"
@@ -118,7 +109,6 @@ fun BoloNavHost() {
                 HomeScreen(
                     onStartSession = { cohortId -> nav.navigate(Routes.attendanceForSession(cohortId)) },
                     onOpenDashboard = { studentId -> nav.navigate(Routes.dashboard(studentId)) },
-                    onEnroll = { cohortId, studentId -> nav.navigate(Routes.enroll(cohortId, studentId)) },
                     onOpenSession = { sessionId -> nav.navigate(Routes.summary(sessionId)) },
                     onOpenHistory = { cohortId -> nav.navigate(Routes.history(cohortId)) },
                     onOpenSettings = { cohortId -> nav.navigate(Routes.settings(cohortId)) },
@@ -136,21 +126,6 @@ fun BoloNavHost() {
                             popUpTo(Routes.HOME) { inclusive = false }
                         }
                     }
-                )
-            }
-
-            composable(
-                route = Routes.ENROLL,
-                arguments = listOf(
-                    navArgument("cohortId") { type = NavType.StringType },
-                    navArgument("studentId") { type = NavType.StringType }
-                )
-            ) { entry ->
-                EnrollmentScreen(
-                    cohortId = entry.arguments?.getString("cohortId").orEmpty(),
-                    studentId = entry.arguments?.getString("studentId").orEmpty(),
-                    onDone = { nav.popBackStack() },
-                    onCancel = { nav.popBackStack() }
                 )
             }
 
@@ -289,9 +264,7 @@ fun BoloNavHost() {
             ) {
                 SettingsScreen(
                     onBack = { nav.popBackStack() },
-                    onManageStudents = { nav.navigate(Routes.PICK_COHORT_FOR_ROSTER) },
-                    onOpenSync = { nav.navigate(Routes.SYNC) },
-                    onForgetVoice = { nav.navigate(Routes.FORGET_VOICE) }
+                    onManageStudents = { nav.navigate(Routes.PICK_COHORT_FOR_ROSTER) }
                 )
             }
             composable(Routes.PICK_COHORT_FOR_ROSTER) {
@@ -304,15 +277,6 @@ fun BoloNavHost() {
                     },
                     onNewCohort = { nav.navigate(Routes.NEW_COHORT) }
                 )
-            }
-            composable(Routes.FORGET_VOICE) {
-                ForgetVoiceScreen(
-                    onBack = { nav.popBackStack() },
-                    onDone = { nav.popBackStack(Routes.HOME, inclusive = false) }
-                )
-            }
-            composable(Routes.SYNC) {
-                SyncScreen(onBack = { nav.popBackStack() })
             }
         }
     }
