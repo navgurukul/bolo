@@ -256,7 +256,7 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
             }
             Spacer(Modifier.height(40.dp))
 
-            EnglishRing(share = state.englishShareRolling, drift = state.drifting, diameter = 240.dp) {
+            EnglishRing(share = state.englishShareRolling, drift = false, diameter = 240.dp) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         Format.clockMs(state.elapsedMs),

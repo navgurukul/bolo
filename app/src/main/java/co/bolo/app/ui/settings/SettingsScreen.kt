@@ -33,8 +33,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.bolo.app.BuildConfig
+import co.bolo.app.ui.components.BoloGhostButton
 import co.bolo.app.ui.components.BoloScreenTitle
 import co.bolo.app.ui.components.BoloSectionLabel
+import co.bolo.app.ui.components.BoloSolidButton
 import co.bolo.app.ui.components.BoloTopBar
 import co.bolo.app.ui.components.Hairline
 import co.bolo.app.ui.theme.BoloPalette
@@ -44,12 +46,14 @@ import co.bolo.app.ui.theme.MonoData
 fun SettingsScreen(
     onBack: () -> Unit,
     onManageStudents: () -> Unit,
+    onDataCleared: () -> Unit,
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     var ringOn by remember { mutableStateOf(true) }
     var vibrOn by remember { mutableStateOf(false) }
     var topicReminder by remember { mutableStateOf(true) }
+    var clearDialogOpen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -94,6 +98,16 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(24.dp))
+        BoloSectionLabel("Privacy")
+        SettingRow(
+            label = "Clear all data & restart setup",
+            value = "",
+            chevron = true,
+            danger = true,
+            onClick = { clearDialogOpen = true }
+        )
+
+        Spacer(Modifier.height(24.dp))
         BoloSectionLabel("About")
         SettingRow(
             label = "Version",
@@ -111,6 +125,53 @@ fun SettingsScreen(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         Spacer(Modifier.height(40.dp))
+    }
+
+    if (clearDialogOpen) {
+        ClearAllDataDialog(
+            onConfirm = {
+                clearDialogOpen = false
+                vm.clearAllData(onDataCleared)
+            },
+            onDismiss = { clearDialogOpen = false }
+        )
+    }
+}
+
+@Composable
+private fun ClearAllDataDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BoloPalette.Ink.copy(alpha = 0.55f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 28.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(BoloPalette.Surface)
+                .clickable(enabled = false) { }
+                .padding(26.dp)
+        ) {
+            Text(
+                "Clear everything?",
+                color = BoloPalette.Ink,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Cohorts, students, sessions, transcripts and your consent will all be deleted from this phone. " +
+                    "You'll be taken back to first-run setup. This can't be undone.",
+                color = BoloPalette.InkMuted,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(22.dp))
+            BoloSolidButton("Yes, clear everything", danger = true, onClick = onConfirm)
+            Spacer(Modifier.height(8.dp))
+            BoloGhostButton("Cancel", onClick = onDismiss)
+        }
     }
 }
 

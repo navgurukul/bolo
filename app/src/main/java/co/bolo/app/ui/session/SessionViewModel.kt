@@ -35,12 +35,10 @@ data class SessionUiState(
     val customTopic: String = "",
     val elapsedMs: Long = 0L,
     val englishShareRolling: Float = 0f,
-    val drifting: Boolean = false,
     val totalSpeechMs: Long = 0L,
     val totalEnglishMs: Long = 0L,
     val isPermissionGranted: Boolean = false,
     val chunks: List<ChunkAnalysis> = emptyList(),
-    val showDebugTranscript: Boolean = false,
     val activeSpeakerId: String? = null,
     val studentSpeechMs: Map<String, Long> = emptyMap(),
     val paused: Boolean = false,
@@ -127,10 +125,6 @@ class SessionViewModel @Inject constructor(
 
     fun onPermissionResult(granted: Boolean) {
         _state.value = _state.value.copy(isPermissionGranted = granted)
-    }
-
-    fun toggleDebugTranscript() {
-        _state.value = _state.value.copy(showDebugTranscript = !_state.value.showDebugTranscript)
     }
 
     fun setTopic(t: String) { _state.value = _state.value.copy(topic = t, customTopic = "") }
@@ -221,12 +215,17 @@ class SessionViewModel @Inject constructor(
             )
         )
 
-        val stats = s.students.map { stu ->
+        // Only persist stats for students who actually spoke. Rows with
+        // speechMs == 0 used to pollute the History median and the Dashboard
+        // trend line for anyone who was on the attendance list but quiet.
+        val stats = s.students.mapNotNull { stu ->
+            val speechMs = studentSpeechMsMap[stu.id] ?: 0L
+            if (speechMs <= 0L) return@mapNotNull null
+
             val studentChunks = s.chunks.filter { it.speakerId == stu.id }
             val studentEnglishWords = studentChunks.sumOf { it.metrics.englishCount }
             val studentMeaningfulTokens = studentChunks.sumOf { it.metrics.meaningfulCount }
 
-            val speechMs = studentSpeechMsMap[stu.id] ?: 0L
             val englishShare = if (studentMeaningfulTokens > 0) {
                 studentEnglishWords.toFloat() / studentMeaningfulTokens.toFloat()
             } else 0f

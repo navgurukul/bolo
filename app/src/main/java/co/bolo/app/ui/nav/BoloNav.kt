@@ -94,7 +94,16 @@ fun BoloNavHost() {
                 ConsentScreen(onContinue = { nav.navigate(Routes.MIC_PERM) })
             }
             composable(Routes.MIC_PERM) {
-                MicPermScreen(onAllow = { nav.navigate(Routes.COHORT_SETUP) })
+                MicPermScreen(
+                    onAllow = { nav.navigate(Routes.COHORT_SETUP) },
+                    // "Only this time" still moves forward — the actual OS
+                    // permission is requested at session start, not here.
+                    onOnce = { nav.navigate(Routes.COHORT_SETUP) },
+                    // "Don't allow" pops back to Consent so the user can
+                    // re-read why the mic is needed instead of getting
+                    // stuck on a dead screen.
+                    onDeny = { nav.popBackStack() }
+                )
             }
             composable(Routes.COHORT_SETUP) {
                 CohortSetupScreen(onReady = {
@@ -264,7 +273,14 @@ fun BoloNavHost() {
             ) {
                 SettingsScreen(
                     onBack = { nav.popBackStack() },
-                    onManageStudents = { nav.navigate(Routes.PICK_COHORT_FOR_ROSTER) }
+                    onManageStudents = { nav.navigate(Routes.PICK_COHORT_FOR_ROSTER) },
+                    onDataCleared = {
+                        // Everything's been wiped — bounce back to Splash so the
+                        // facilitator runs the consent + cohort setup again.
+                        nav.navigate(Routes.SPLASH) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
                 )
             }
             composable(Routes.PICK_COHORT_FOR_ROSTER) {
