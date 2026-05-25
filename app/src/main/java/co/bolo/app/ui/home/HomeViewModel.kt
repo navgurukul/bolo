@@ -23,7 +23,8 @@ data class HomeUiState(
     val cohorts: List<Cohort> = emptyList(),
     val selectedCohortId: String? = null,
     val students: List<Student> = emptyList(),
-    val recentSessions: List<Session> = emptyList()
+    val recentSessions: List<Session> = emptyList(),
+    val cohortStudentCounts: Map<String, Int> = emptyMap()
 )
 
 @HiltViewModel
@@ -39,19 +40,29 @@ class HomeViewModel @Inject constructor(
         cohortRepo.observeCohorts(),
         selectedCohortId
     ) { cohorts, sel ->
-        val effectiveId = sel ?: cohorts.firstOrNull()?.id
-        Triple(cohorts, effectiveId, effectiveId)
-    }.flatMapLatest { (cohorts, sel, _) ->
-        if (sel == null) flowOf(HomeUiState(cohorts = cohorts))
+        // Prefer an explicit selection; otherwise fall back to first cohort.
+        val effectiveId = sel?.takeIf { id -> cohorts.any { it.id == id } }
+            ?: cohorts.firstOrNull()?.id
+        cohorts to effectiveId
+    }.flatMapLatest { (cohorts, sel) ->
+        if (cohorts.isEmpty()) flowOf(HomeUiState())
+        else if (sel == null) flowOf(HomeUiState(cohorts = cohorts))
         else combine(
             cohortRepo.observeStudents(sel),
             sessionRepo.observeForCohort(sel)
         ) { students, sessions ->
+            // For headline counts on each cohort row we lean on the
+            // currently-loaded students list for the selected cohort; for
+            // others we ship 0 and let the cohort screen show real counts.
+            val counts = cohorts.associate { c ->
+                c.id to if (c.id == sel) students.size else 0
+            }
             HomeUiState(
                 cohorts = cohorts,
                 selectedCohortId = sel,
                 students = students,
-                recentSessions = sessions.take(5)
+                recentSessions = sessions.take(5),
+                cohortStudentCounts = counts
             )
         }
     }.stateIn(

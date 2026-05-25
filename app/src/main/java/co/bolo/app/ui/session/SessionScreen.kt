@@ -164,27 +164,13 @@ private fun TopicPicker(
 
         Spacer(Modifier.height(40.dp))
         val canStart = vm.resolvedTopic().isNotBlank() && state.students.isNotEmpty()
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(if (canStart) BoloPalette.Ink else BoloPalette.SurfaceMuted)
-                .clickable(enabled = canStart) {
-                    if (state.isPermissionGranted) {
-                        vm.start()
-                    } else {
-                        onRequestPermission()
-                    }
-                }
-                .padding(vertical = 18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                if (state.isPermissionGranted) "Start listening" else "Grant Mic Permission",
-                color = if (canStart) BoloPalette.Bg else BoloPalette.InkFaint,
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
+        BoloSolidButton(
+            label = if (state.isPermissionGranted) "Start listening" else "Grant mic permission",
+            enabled = canStart,
+            onClick = {
+                if (state.isPermissionGranted) vm.start() else onRequestPermission()
+            }
+        )
         Spacer(Modifier.height(12.dp))
         Text(
             "No audio leaves this phone. The mic light stays on whenever we're listening.",
@@ -376,22 +362,16 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
 
             Spacer(Modifier.weight(1f))
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(BoloPalette.SurfaceMuted)
-                    .clickable {
-                        scope.launch {
-                            val id = vm.end()
-                            onEnd(id)
-                        }
+            BoloSolidButton(
+                label = "End session",
+                danger = true,
+                onClick = {
+                    scope.launch {
+                        val id = vm.end()
+                        onEnd(id)
                     }
-                    .padding(vertical = 18.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("End session", style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
-            }
+                }
+            )
             Spacer(Modifier.height(12.dp))
             Text(
                 "Only the English percentage is saved.",

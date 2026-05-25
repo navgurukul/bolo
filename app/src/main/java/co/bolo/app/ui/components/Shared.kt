@@ -37,7 +37,11 @@ import co.bolo.app.ui.theme.SerifAccent
 // Buttons
 // ─────────────────────────────────────────────────────────────
 
-/** Filled black pill — the primary CTA across the app. */
+/**
+ * Filled primary CTA. Matches the design system's `<Btn solid>` —
+ * sage accent on warm off-white, radius 12, white label. Danger
+ * swaps the bg to the breathing-red used by the mic indicator.
+ */
 @Composable
 fun BoloSolidButton(
     label: String,
@@ -49,16 +53,16 @@ fun BoloSolidButton(
     val bg = when {
         !enabled -> BoloPalette.SurfaceMuted
         danger -> BoloPalette.MicRed
-        else -> BoloPalette.Ink
+        else -> BoloPalette.Sage
     }
     val fg = when {
         !enabled -> BoloPalette.InkFaint
-        else -> BoloPalette.Bg
+        else -> BoloPalette.Surface
     }
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 16.dp, horizontal = 24.dp),

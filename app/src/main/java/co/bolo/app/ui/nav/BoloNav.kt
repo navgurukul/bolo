@@ -3,7 +3,6 @@ package co.bolo.app.ui.nav
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
@@ -14,6 +13,7 @@ import androidx.navigation.navArgument
 import co.bolo.app.data.seed.Seed
 import co.bolo.app.ui.attendance.AddStudentScreen
 import co.bolo.app.ui.attendance.AttendanceScreen
+import co.bolo.app.ui.cohort.NewCohortScreen
 import co.bolo.app.ui.dashboard.DashboardScreen
 import co.bolo.app.ui.enrollment.EnrollmentScreen
 import co.bolo.app.ui.firstrun.CohortSetupScreen
@@ -24,17 +24,13 @@ import co.bolo.app.ui.firstrun.SplashScreen
 import co.bolo.app.ui.history.HistoryScreen
 import co.bolo.app.ui.history.SessionDetailScreen
 import co.bolo.app.ui.home.HomeScreen
-import co.bolo.app.ui.session.NameEditingScreen
-import co.bolo.app.ui.session.ParticipantCountScreen
 import co.bolo.app.ui.session.SessionScreen
-import co.bolo.app.ui.session.SessionViewModel
 import co.bolo.app.ui.settings.ForgetVoiceScreen
 import co.bolo.app.ui.settings.SettingsScreen
 import co.bolo.app.ui.settings.SyncScreen
 import co.bolo.app.ui.summary.SummaryScreen
 import co.bolo.app.ui.theme.BoloPalette
 import co.bolo.app.util.Prefs
-import androidx.hilt.navigation.compose.hiltViewModel
 
 object Routes {
     const val SPLASH = "splash"
@@ -44,15 +40,18 @@ object Routes {
     const val COHORT_SETUP = "cohort_setup"
 
     const val HOME = "home"
+    const val NEW_COHORT = "cohort/new"
     const val ENROLL = "enroll/{cohortId}/{studentId}"
-    const val SETUP_COUNT = "setup/count/{cohortId}"
-    const val SETUP_NAMES = "setup/names/{cohortId}"
+    // Attendance is now the session entry-point — replaces the
+    // ad-hoc participant-count and name-edit screens.
+    const val ATTENDANCE_FOR_SESSION = "attendance/session/{cohortId}"
+    const val ATTENDANCE_FOR_ROSTER = "attendance/roster/{cohortId}"
+    const val ADD_STUDENT = "add_student/{cohortId}"
+
     const val SESSION = "session/{cohortId}"
     const val SUMMARY = "summary/{sessionId}"
     const val DASHBOARD = "dashboard/{studentId}"
 
-    const val ATTENDANCE = "attendance/{cohortId}"
-    const val ADD_STUDENT = "add_student/{cohortId}"
     const val HISTORY = "history"
     const val SESSION_DETAIL = "session_detail/{id}"
     const val SETTINGS = "settings"
@@ -60,13 +59,12 @@ object Routes {
     const val SYNC = "sync"
 
     fun enroll(cohortId: String, studentId: String) = "enroll/$cohortId/$studentId"
-    fun setupCount(cohortId: String) = "setup/count/$cohortId"
-    fun setupNames(cohortId: String) = "setup/names/$cohortId"
+    fun attendanceForSession(cohortId: String) = "attendance/session/$cohortId"
+    fun attendanceForRoster(cohortId: String) = "attendance/roster/$cohortId"
+    fun addStudent(cohortId: String) = "add_student/$cohortId"
     fun session(cohortId: String) = "session/$cohortId"
     fun summary(sessionId: String) = "summary/$sessionId"
     fun dashboard(studentId: String) = "dashboard/$studentId"
-    fun attendance(cohortId: String) = "attendance/$cohortId"
-    fun addStudent(cohortId: String) = "add_student/$cohortId"
     fun sessionDetail(id: String) = "session_detail/$id"
 }
 
@@ -113,14 +111,29 @@ fun BoloNavHost() {
 
             composable(Routes.HOME) {
                 HomeScreen(
-                    onStartSession = { cohortId -> nav.navigate(Routes.setupCount(cohortId)) },
+                    onStartSession = { cohortId -> nav.navigate(Routes.attendanceForSession(cohortId)) },
                     onOpenDashboard = { studentId -> nav.navigate(Routes.dashboard(studentId)) },
                     onEnroll = { cohortId, studentId -> nav.navigate(Routes.enroll(cohortId, studentId)) },
                     onOpenSession = { sessionId -> nav.navigate(Routes.summary(sessionId)) },
                     onOpenHistory = { nav.navigate(Routes.HISTORY) },
-                    onOpenSettings = { nav.navigate(Routes.SETTINGS) }
+                    onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                    onNewCohort = { nav.navigate(Routes.NEW_COHORT) }
                 )
             }
+
+            composable(Routes.NEW_COHORT) {
+                NewCohortScreen(
+                    onBack = { nav.popBackStack() },
+                    onCreated = { cohortId ->
+                        // Land facilitator on the attendance screen for the
+                        // new cohort so they can start adding students.
+                        nav.navigate(Routes.attendanceForRoster(cohortId)) {
+                            popUpTo(Routes.HOME) { inclusive = false }
+                        }
+                    }
+                )
+            }
+
             composable(
                 route = Routes.ENROLL,
                 arguments = listOf(
@@ -135,39 +148,78 @@ fun BoloNavHost() {
                     onCancel = { nav.popBackStack() }
                 )
             }
+
+            // Attendance · session-start mode.
+            // Selecting "Start" jumps into the live session with the
+            // tapped students as the present roster.
             composable(
-                route = Routes.SETUP_COUNT,
+                route = Routes.ATTENDANCE_FOR_SESSION,
                 arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
             ) { entry ->
-                val parentEntry = remember(entry) { nav.getBackStackEntry(Routes.SETUP_COUNT) }
-                val vm: SessionViewModel = hiltViewModel(parentEntry)
-                ParticipantCountScreen(
-                    vm = vm,
-                    onNext = { _ -> nav.navigate(Routes.setupNames(entry.arguments?.getString("cohortId")!!)) },
-                    onBack = { nav.popBackStack() }
+                val cohortId = entry.arguments?.getString("cohortId").orEmpty()
+                AttendanceScreen(
+                    onBack = { nav.popBackStack() },
+                    onAddStudent = { nav.navigate(Routes.addStudent(cohortId)) },
+                    onStart = { presentIds ->
+                        val route = if (presentIds.isEmpty()) Routes.session(cohortId)
+                        else Routes.session(cohortId) + "?present=" + presentIds.joinToString(",")
+                        nav.navigate(route)
+                    }
                 )
             }
+
+            // Attendance · roster-management mode.
+            // Same screen — just no "start session" exit.
             composable(
-                route = Routes.SETUP_NAMES,
+                route = Routes.ATTENDANCE_FOR_ROSTER,
                 arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
             ) { entry ->
-                val parentEntry = remember(entry) { nav.getBackStackEntry(Routes.SETUP_COUNT) }
-                val vm: SessionViewModel = hiltViewModel(parentEntry)
-                NameEditingScreen(
-                    vm = vm,
-                    onStartSession = { nav.navigate(Routes.session(entry.arguments?.getString("cohortId")!!)) },
-                    onBack = { nav.popBackStack() }
+                val cohortId = entry.arguments?.getString("cohortId").orEmpty()
+                AttendanceScreen(
+                    onBack = { nav.popBackStack() },
+                    onAddStudent = { nav.navigate(Routes.addStudent(cohortId)) },
+                    onStart = { _ -> nav.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Routes.ADD_STUDENT,
+                arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
+            ) { entry ->
+                val cohortId = entry.arguments?.getString("cohortId").orEmpty()
+                AddStudentScreen(
+                    cohortId = cohortId,
+                    onBack = { nav.popBackStack() },
+                    onContinue = { _ -> nav.popBackStack() }
+                )
+            }
+
+            composable(
+                // Optional ?present= comma-joined student ids selected on Attendance.
+                route = Routes.SESSION + "?present={present}",
+                arguments = listOf(
+                    navArgument("cohortId") { type = NavType.StringType },
+                    navArgument("present") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { _ ->
+                SessionScreen(
+                    onEnd = { sessionId ->
+                        nav.navigate(Routes.summary(sessionId)) {
+                            popUpTo(Routes.HOME)
+                        }
+                    },
+                    onCancel = { nav.popBackStack() }
                 )
             }
             composable(
                 route = Routes.SESSION,
                 arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
             ) { _ ->
-                val setupEntry = try { nav.getBackStackEntry(Routes.SETUP_COUNT) } catch (e: Exception) { null }
-                val vm: SessionViewModel = if (setupEntry != null) hiltViewModel(setupEntry) else hiltViewModel()
-
                 SessionScreen(
-                    vm = vm,
                     onEnd = { sessionId ->
                         nav.navigate(Routes.summary(sessionId)) {
                             popUpTo(Routes.HOME)
@@ -196,28 +248,6 @@ fun BoloNavHost() {
                 )
             }
 
-            // ── new presentational screens ──
-            composable(
-                route = Routes.ATTENDANCE,
-                arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
-            ) { _ ->
-                AttendanceScreen(
-                    onBack = { nav.popBackStack() },
-                    onAddStudent = {
-                        nav.navigate(Routes.addStudent(Seed.DEFAULT_COHORT_ID))
-                    },
-                    onStart = { _ -> nav.popBackStack() }
-                )
-            }
-            composable(
-                route = Routes.ADD_STUDENT,
-                arguments = listOf(navArgument("cohortId") { type = NavType.StringType })
-            ) { _ ->
-                AddStudentScreen(
-                    onBack = { nav.popBackStack() },
-                    onContinue = { _ -> nav.popBackStack() }
-                )
-            }
             composable(Routes.HISTORY) {
                 HistoryScreen(
                     onBack = { nav.popBackStack() },
@@ -236,7 +266,7 @@ fun BoloNavHost() {
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onBack = { nav.popBackStack() },
-                    onManageStudents = { nav.navigate(Routes.attendance(Seed.DEFAULT_COHORT_ID)) },
+                    onManageStudents = { nav.navigate(Routes.attendanceForRoster(Seed.DEFAULT_COHORT_ID)) },
                     onOpenSync = { nav.navigate(Routes.SYNC) },
                     onForgetVoice = { nav.navigate(Routes.FORGET_VOICE) }
                 )

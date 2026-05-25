@@ -37,8 +37,6 @@ data class SessionUiState(
     val drifting: Boolean = false,
     val totalSpeechMs: Long = 0L,
     val totalEnglishMs: Long = 0L,
-    val participantCount: Int = 0,
-    val setupNames: List<String> = emptyList(),
     val isPermissionGranted: Boolean = false,
     val chunks: List<ChunkAnalysis> = emptyList(),
     val showDebugTranscript: Boolean = false,
@@ -60,23 +58,32 @@ class SessionViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val cohortId: String = savedState["cohortId"] ?: ""
+    /**
+     * Comma-joined list of student ids selected on the attendance screen.
+     * Empty / null means "everyone in the cohort". The viewmodel filters
+     * the observed roster down to this set so untapped students do not
+     * appear as taggable tiles during the session.
+     */
+    private val presentArg: String? = savedState["present"]
+    private val presentIds: Set<String> =
+        presentArg?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet().orEmpty()
+
     private val _state = MutableStateFlow(SessionUiState(cohortId = cohortId))
     val state: StateFlow<SessionUiState> = _state.asStateFlow()
     private var sessionId: String? = null
     private var startedAt: Long = 0L
     private var timerJob: Job? = null
-    private var isManualSetup = false
     private val studentSpeechMsMap = mutableMapOf<String, Long>()
 
     init {
         viewModelScope.launch {
             cohortRepo.observeStudents(cohortId).collect { list ->
-                if (!isManualSetup && list.isNotEmpty()) {
-                    _state.value = _state.value.copy(students = list)
-                }
+                val filtered = if (presentIds.isEmpty()) list
+                else list.filter { it.id in presentIds }
+                _state.value = _state.value.copy(students = filtered)
             }
         }
-        
+
         viewModelScope.launch {
             sessionManager.englishPercentage.collect { percentage ->
                 _state.value = _state.value.copy(
@@ -107,38 +114,6 @@ class SessionViewModel @Inject constructor(
         _state.value = _state.value.copy(showDebugTranscript = !_state.value.showDebugTranscript)
     }
 
-    fun setParticipantCount(count: Int) {
-        isManualSetup = true
-        _state.value = _state.value.copy(
-            participantCount = count,
-            setupNames = List(count) { "" }
-        )
-    }
-
-    fun updateSetupName(index: Int, name: String) {
-        val names = _state.value.setupNames.toMutableList()
-        if (index in names.indices) {
-            names[index] = name
-            _state.value = _state.value.copy(setupNames = names)
-        }
-    }
-
-    fun finalizeParticipants() {
-        val names = _state.value.setupNames
-        if (names.isNotEmpty()) {
-            _state.value = _state.value.copy(
-                students = names.mapIndexed { i, name ->
-                    val displayName = name.ifBlank { "Participant ${i + 1}" }
-                    Student(
-                        id = "student-${UUID.randomUUID()}", 
-                        cohortId = cohortId, 
-                        displayName = displayName
-                    )
-                }
-            )
-        }
-    }
-
     fun setTopic(t: String) { _state.value = _state.value.copy(topic = t, customTopic = "") }
     fun setCustomTopic(t: String) { _state.value = _state.value.copy(customTopic = t, topic = "") }
     fun resolvedTopic(): String =
@@ -152,12 +127,12 @@ class SessionViewModel @Inject constructor(
         val topic = resolvedTopic().ifBlank { "Free talk" }
         sessionId = UUID.randomUUID().toString()
         startedAt = System.currentTimeMillis()
-        
+
         studentSpeechMsMap.clear()
         _state.value.students.forEach {
             studentSpeechMsMap[it.id] = 0L
         }
-        
+
         _state.value = _state.value.copy(
             phase = SessionUiState.Phase.Running,
             topic = topic,
@@ -165,10 +140,10 @@ class SessionViewModel @Inject constructor(
             studentSpeechMs = studentSpeechMsMap.toMap(),
             activeSpeakerId = null
         )
-        
+
         val intent = Intent(context, SessionService::class.java)
         context.startForegroundService(intent)
-        
+
         startTimer()
     }
 
@@ -177,13 +152,13 @@ class SessionViewModel @Inject constructor(
         timerJob = viewModelScope.launch {
             while (isActive) {
                 delay(1000)
-                
+
                 val currentActiveSpeakerId = sessionManager.activeSpeakerId.value
                 if (currentActiveSpeakerId != null && studentSpeechMsMap.containsKey(currentActiveSpeakerId)) {
                     val prevTime = studentSpeechMsMap[currentActiveSpeakerId] ?: 0L
                     studentSpeechMsMap[currentActiveSpeakerId] = prevTime + 1000L
                 }
-                
+
                 _state.value = _state.value.copy(
                     elapsedMs = _state.value.elapsedMs + 1000,
                     totalSpeechMs = _state.value.totalSpeechMs + 1000,
@@ -195,7 +170,7 @@ class SessionViewModel @Inject constructor(
 
     suspend fun end(): String {
         timerJob?.cancel()
-        
+
         val intent = Intent(context, SessionService::class.java)
         context.stopService(intent)
 
@@ -204,15 +179,9 @@ class SessionViewModel @Inject constructor(
         val id = sessionId ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
-        // 1. Save any new students created during manual setup
-        s.students.forEach { student ->
-            cohortRepo.upsertStudent(student)
-        }
-        
         val totalEnglishWords = s.chunks.sumOf { it.metrics.englishCount }
         val totalMeaningfulTokens = s.chunks.sumOf { it.metrics.meaningfulCount }
 
-        // 2. Persist the session with summary data
         sessionRepo.upsertSession(
             Session(
                 id = id,
@@ -228,13 +197,12 @@ class SessionViewModel @Inject constructor(
                 meaningfulTokenCount = totalMeaningfulTokens
             )
         )
-        
-        // 3. Link students to session
+
         val stats = s.students.map { stu ->
             val studentChunks = s.chunks.filter { it.speakerId == stu.id }
             val studentEnglishWords = studentChunks.sumOf { it.metrics.englishCount }
             val studentMeaningfulTokens = studentChunks.sumOf { it.metrics.meaningfulCount }
-            
+
             val speechMs = studentSpeechMsMap[stu.id] ?: 0L
             val englishShare = if (studentMeaningfulTokens > 0) {
                 studentEnglishWords.toFloat() / studentMeaningfulTokens.toFloat()
@@ -251,7 +219,6 @@ class SessionViewModel @Inject constructor(
         }
         sessionRepo.upsertStats(stats)
 
-        // 4. Save detailed transcript chunks for debug/analysis
         val transcriptChunks = s.chunks.mapIndexed { index, analysis ->
             TranscriptChunk(
                 sessionId = id,

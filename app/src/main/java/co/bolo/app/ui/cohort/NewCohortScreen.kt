@@ -1,4 +1,4 @@
-package co.bolo.app.ui.attendance
+package co.bolo.app.ui.cohort
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -18,7 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -34,22 +33,18 @@ import co.bolo.app.ui.components.BoloScreenTitle
 import co.bolo.app.ui.components.BoloSolidButton
 import co.bolo.app.ui.components.BoloTopBar
 import co.bolo.app.ui.theme.BoloPalette
-import kotlinx.coroutines.launch
 
 /**
- * Standalone add-student screen. Used from Settings → Manage students,
- * and as a deeper alternative to the inline add field on the attendance
- * screen. Persists immediately on continue, then returns.
+ * Create a new cohort. Persisted immediately; the new cohort becomes
+ * selectable on Home from the next render.
  */
 @Composable
-fun AddStudentScreen(
-    cohortId: String,
+fun NewCohortScreen(
     onBack: () -> Unit,
-    onContinue: (name: String) -> Unit,
-    vm: AttendanceViewModel = hiltViewModel()
+    onCreated: (cohortId: String) -> Unit,
+    vm: NewCohortViewModel = hiltViewModel()
 ) {
     var name by remember { mutableStateOf("") }
-    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -58,13 +53,19 @@ fun AddStudentScreen(
             .verticalScroll(rememberScrollState())
             .padding(PaddingValues(horizontal = 24.dp, vertical = 28.dp))
     ) {
-        BoloTopBar(label = "Add a student", onBack = onBack)
+        BoloTopBar(label = "New cohort", onBack = onBack)
         Spacer(Modifier.height(22.dp))
-        BoloScreenTitle("What's their name?")
+        BoloScreenTitle("What do you\ncall this group?")
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.material3.Text(
+            "Anything you'd recognise — \"Pune Batch 14\", \"Saturday English club\". You can rename later.",
+            color = BoloPalette.InkMuted,
+            style = MaterialTheme.typography.bodyMedium
+        )
         Spacer(Modifier.height(22.dp))
 
         Column(modifier = Modifier.fillMaxWidth()) {
-            BoloCaption("First name")
+            BoloCaption("Cohort name")
             Spacer(Modifier.height(8.dp))
             BasicTextField(
                 value = name,
@@ -91,18 +92,15 @@ fun AddStudentScreen(
         }
         Spacer(Modifier.height(18.dp))
         BoloPrivacyNote(
-            "Names live on this phone only. Bolo never uploads them, and there's no voice fingerprint to forget later."
+            "A cohort is just a list of names that live on this phone. Add students once — Bolo keeps them around for every session after."
         )
         Spacer(Modifier.height(28.dp))
-        val enabled = name.trim().isNotEmpty() && cohortId.isNotBlank()
+        val enabled = name.trim().isNotEmpty()
         BoloSolidButton(
-            label = "Save to cohort →",
+            label = "Create cohort →",
             onClick = {
                 if (!enabled) return@BoloSolidButton
-                scope.launch {
-                    vm.addStudent(name) {}
-                    onContinue(name.trim())
-                }
+                vm.create(name) { id -> onCreated(id) }
             },
             enabled = enabled
         )

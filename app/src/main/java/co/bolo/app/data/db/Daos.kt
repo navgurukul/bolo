@@ -20,14 +20,23 @@ interface CohortDao {
     @Query("SELECT * FROM cohorts WHERE id = :id")
     suspend fun byId(id: String): Cohort?
 
+    @Query("SELECT COUNT(*) FROM students WHERE cohortId = :cohortId")
+    suspend fun studentCount(cohortId: String): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(cohort: Cohort)
+
+    @Query("DELETE FROM cohorts WHERE id = :id")
+    suspend fun delete(id: String)
 }
 
 @Dao
 interface StudentDao {
     @Query("SELECT * FROM students WHERE cohortId = :cohortId ORDER BY displayName")
     fun observeByCohort(cohortId: String): Flow<List<Student>>
+
+    @Query("SELECT * FROM students WHERE cohortId = :cohortId ORDER BY displayName")
+    suspend fun byCohort(cohortId: String): List<Student>
 
     @Query("SELECT * FROM students WHERE id = :id")
     suspend fun byId(id: String): Student?
@@ -37,6 +46,9 @@ interface StudentDao {
 
     @Update
     suspend fun update(student: Student)
+
+    @Query("DELETE FROM students WHERE id = :id")
+    suspend fun delete(id: String)
 
     @Query("UPDATE students SET voiceEmbedding = NULL, enrolledAt = NULL WHERE id = :id")
     suspend fun forgetVoice(id: String)

@@ -32,15 +32,19 @@ object AppModule {
         val seedScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         lateinit var db: BoloDatabase
         db = Room.databaseBuilder(ctx, BoloDatabase::class.java, BoloDatabase.NAME)
-            .fallbackToDestructiveMigration()
+            // From v5 onward we preserve user data across app updates.
+            // Older v1..v3 installs (pre-public, dev devices only) are
+            // allowed to wipe cleanly — they predate any real cohort data.
+            .addMigrations(*BoloDatabase.ALL_MIGRATIONS)
+            .fallbackToDestructiveMigrationFrom(1, 2, 3)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onCreate(db2: androidx.sqlite.db.SupportSQLiteDatabase) {
                     super.onCreate(db2)
+                    // Seed the default cohort exactly once, on first install.
                     seedScope.launch { Seed.apply(db) }
                 }
             })
             .build()
-        seedScope.launch { Seed.apply(db) }
         return db
     }
 
