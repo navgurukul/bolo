@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +37,9 @@ import co.bolo.app.ui.components.Hairline
 import co.bolo.app.ui.components.Wordmark
 import co.bolo.app.ui.theme.BoloPalette
 import co.bolo.app.ui.theme.MonoData
+import co.bolo.app.update.UpdateAvailableDialog
+import co.bolo.app.update.UpdateState
+import co.bolo.app.update.UpdateViewModel
 
 @Composable
 fun HomeScreen(
@@ -45,13 +49,22 @@ fun HomeScreen(
     onOpenHistory: (cohortId: String?) -> Unit,
     onOpenSettings: (cohortId: String?) -> Unit,
     onNewCohort: () -> Unit = {},
-    vm: HomeViewModel = hiltViewModel()
+    vm: HomeViewModel = hiltViewModel(),
+    updateVm: UpdateViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val cohortId = state.selectedCohortId
+    val updateState by updateVm.state.collectAsStateWithLifecycle()
+
+    // Silently poll GitHub Releases when the user lands on Home. Network
+    // errors don't surface; we only interrupt with a dialog when there is
+    // a strictly newer build available.
+    LaunchedEffect(Unit) { updateVm.checkSilently() }
+
+    Box(modifier = Modifier.fillMaxSize().background(BoloPalette.Bg)) {
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(BoloPalette.Bg),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 28.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
@@ -208,6 +221,15 @@ fun HomeScreen(
 
         item { Spacer(Modifier.height(40.dp)) }
     }
+
+    (updateState as? UpdateState.Available)?.let { available ->
+        UpdateAvailableDialog(
+            available = available,
+            onInstall = { updateVm.startInstall() },
+            onDismiss = { updateVm.dismiss() }
+        )
+    }
+    } // Box
 }
 
 @Composable
