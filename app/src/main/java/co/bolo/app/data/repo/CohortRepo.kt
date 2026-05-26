@@ -47,9 +47,7 @@ class CohortRepo @Inject constructor(
             Student(
                 id = id,
                 cohortId = cohortId,
-                displayName = name.trim(),
-                voiceEmbedding = null,
-                enrolledAt = null
+                displayName = name.trim()
             )
         )
         return id

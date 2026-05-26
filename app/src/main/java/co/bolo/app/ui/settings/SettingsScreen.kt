@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,9 +47,6 @@ fun SettingsScreen(
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    var ringOn by remember { mutableStateOf(true) }
-    var vibrOn by remember { mutableStateOf(false) }
-    var topicReminder by remember { mutableStateOf(true) }
     var clearDialogOpen by remember { mutableStateOf(false) }
 
     Column(
@@ -74,27 +68,6 @@ fun SettingsScreen(
             value = "${state.studentCount} enrolled",
             chevron = true,
             onClick = onManageStudents
-        )
-
-        Spacer(Modifier.height(24.dp))
-        BoloSectionLabel("During a session")
-        ToggleRow(
-            label = "Show soft colour ring",
-            sub = "Green when English flows. Amber on drift.",
-            on = ringOn,
-            onChange = { ringOn = it }
-        )
-        ToggleRow(
-            label = "Vibrate on long drift",
-            sub = "One pulse after 30s in another language.",
-            on = vibrOn,
-            onChange = { vibrOn = it }
-        )
-        ToggleRow(
-            label = "Show topic switch reminder",
-            sub = "Suggest switching topic after 20 min.",
-            on = topicReminder,
-            onChange = { topicReminder = it }
         )
 
         Spacer(Modifier.height(24.dp))
@@ -215,47 +188,3 @@ fun SettingRow(
     }
 }
 
-@Composable
-fun ToggleRow(
-    label: String,
-    sub: String,
-    on: Boolean,
-    onChange: (Boolean) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(label, color = BoloPalette.Ink, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(2.dp))
-                Text(sub, color = BoloPalette.InkFaint, style = MaterialTheme.typography.bodySmall)
-            }
-            ToggleSwitch(on = on, onClick = { onChange(!on) })
-        }
-        Hairline()
-    }
-}
-
-@Composable
-private fun ToggleSwitch(on: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(width = 38.dp, height = 22.dp)
-            .clip(RoundedCornerShape(11.dp))
-            .background(if (on) BoloPalette.Sage else BoloPalette.SurfaceMuted)
-            .clickable(onClick = onClick),
-        contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(horizontal = 2.dp)
-                .size(18.dp)
-                .clip(CircleShape)
-                .background(Color.White)
-        )
-    }
-}

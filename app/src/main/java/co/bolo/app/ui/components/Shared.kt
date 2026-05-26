@@ -244,37 +244,6 @@ fun BoloCard(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Delta pill — ↑/↓ N pts
-// ─────────────────────────────────────────────────────────────
-@Composable
-fun BoloDelta(value: Int, modifier: Modifier = Modifier) {
-    val pos = value >= 0
-    val bg = if (pos) BoloPalette.SageSoft else BoloPalette.SurfaceMuted
-    val fg = if (pos) BoloPalette.SageDeep else BoloPalette.InkMuted
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(bg)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            if (pos) "↑" else "↓",
-            color = fg,
-            fontFamily = MonoData,
-            fontSize = 12.sp
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(
-            "${kotlin.math.abs(value)} pts",
-            color = fg,
-            fontFamily = MonoData,
-            fontSize = 12.sp
-        )
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
 // Secondary metric row — label / mono value, hairline bottom
 // ─────────────────────────────────────────────────────────────
 @Composable

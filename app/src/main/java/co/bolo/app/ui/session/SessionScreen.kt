@@ -29,10 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -188,9 +185,7 @@ private fun TopicPicker(
 private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val paused = state.paused
-    var topicOpen by remember { mutableStateOf(false) }
-    var liveTopic by remember(state.topic) { mutableStateOf(state.topic.ifBlank { "Free talk" }) }
-    val currentSpeaker = if (state.students.size > 1) "Group Session" else state.students.firstOrNull()?.displayName ?: "—"
+    val topicLabel = state.topic.ifBlank { "Free talk" }
 
     Box(modifier = Modifier.fillMaxSize().background(BoloPalette.Bg)) {
         Column(
@@ -200,15 +195,14 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             RecognizerStatusBanner(state.recognizerStatus)
-            // Top row: breathing dot + MIC ON · topic (chevron) on left; pause + elapsed on right
+            // Top row: breathing dot + MIC ON · topic on left; pause + elapsed on right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { topicOpen = true }
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
@@ -218,17 +212,11 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "${if (paused) "PAUSED" else "MIC ON"} · ${liveTopic.uppercase()}",
+                        "${if (paused) "PAUSED" else "MIC ON"} · ${topicLabel.uppercase()}",
                         color = BoloPalette.InkMuted,
                         fontFamily = MonoData,
                         fontSize = 11.sp,
                         letterSpacing = 1.5.sp
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "▾",
-                        color = BoloPalette.InkMuted,
-                        fontSize = 11.sp
                     )
                 }
                 Row(
@@ -393,17 +381,6 @@ private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (Strin
                 }
             )
         }
-
-        if (topicOpen) {
-            TopicSwitchSheet(
-                current = liveTopic,
-                onPick = { picked ->
-                    liveTopic = picked
-                    topicOpen = false
-                },
-                onClose = { topicOpen = false }
-            )
-        }
     }
 }
 
@@ -472,65 +449,3 @@ fun PauseOverlay(onResume: () -> Unit, onEnd: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-// TopicSwitchSheet — bottom sheet for swapping topic mid-session
-// ─────────────────────────────────────────────────────────────
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun TopicSwitchSheet(
-    current: String,
-    onPick: (String) -> Unit,
-    onClose: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BoloPalette.Ink.copy(alpha = 0.45f))
-            .clickable(onClick = onClose),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(BoloPalette.Surface)
-                .clickable(enabled = false) { }
-                .padding(horizontal = 24.dp, vertical = 20.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 18.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(BoloPalette.Ink.copy(alpha = 0.22f))
-                )
-            }
-            BoloCaption("Switch topic mid-session")
-            Spacer(Modifier.height(4.dp))
-            BoloItalicAccent("What are we talking about now?", fontSize = 22)
-            Spacer(Modifier.height(16.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                co.bolo.app.ui.components.BOLO_TOPICS.forEach { tp ->
-                    TopicPill(
-                        label = tp,
-                        selected = tp == current,
-                        onClick = { onPick(tp) }
-                    )
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "The session continues — we'll just tag what's said from here on with the new topic.",
-                color = BoloPalette.InkFaint,
-                style = MaterialTheme.typography.bodySmall
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
