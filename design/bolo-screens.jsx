@@ -120,8 +120,19 @@ function HomeScreen({ t, state, set }) {
       <Pad>
         <Wordmark t={t} />
         <div style={{ height: 40 }} />
-        <div style={{ color: t.muted, fontSize: 14, fontFamily: t.fontMono, letterSpacing: 0.5 }}>
-          Tuesday · 9:30 AM
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ color: t.muted, fontSize: 14, fontFamily: t.fontMono, letterSpacing: 0.5 }}>
+            Tuesday · 9:30 AM
+          </div>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 10px', borderRadius: 100,
+            background: t.accentSoft, color: t.accentDeep,
+            fontFamily: t.fontMono, fontSize: 10.5, letterSpacing: 0.6,
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: t.accent }} />
+            SYNCED
+          </div>
         </div>
         <div style={{ height: 8 }} />
         <ScreenTitle t={t}>Good morning,<br/>let's speak some English.</ScreenTitle>
@@ -129,6 +140,10 @@ function HomeScreen({ t, state, set }) {
         <Btn t={t} full onClick={() => set({ screen: 'start' })}>
           Start a session →
         </Btn>
+        <div style={{ height: 6 }} />
+        <div style={{ fontFamily: t.fontMono, fontSize: 11, color: t.muted, letterSpacing: 0.5, textAlign: 'center' }}>
+          Pune · Batch 14 · 6 students
+        </div>
         <div style={{ height: 28 }} />
 
         {/* Last session card */}
@@ -161,27 +176,13 @@ function HomeScreen({ t, state, set }) {
         <div style={{ height: 24 }} />
         <Rule t={t} dim />
         <div style={{ height: 16 }} />
-        <button onClick={() => set({ screen: 'dashboard' })}
-          style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            width: '100%', padding: '8px 0', fontFamily: t.fontBody, color: t.fg,
-            fontSize: 15,
-          }}>
-          <span>See your progress</span>
-          <span style={{ color: t.muted }}>→</span>
-        </button>
+        <HomeLink t={t} onClick={() => set({ screen: 'dashboard' })} label="See your progress" />
         <Rule t={t} dim />
-        <button onClick={() => set({ screen: 'enroll' })}
-          style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            width: '100%', padding: '14px 0', fontFamily: t.fontBody, color: t.fg,
-            fontSize: 15,
-          }}>
-          <span>Enroll a new voice</span>
-          <span style={{ color: t.muted }}>→</span>
-        </button>
+        <HomeLink t={t} onClick={() => set({ screen: 'history' })} label="Past sessions" hint="6 this month" />
+        <Rule t={t} dim />
+        <HomeLink t={t} onClick={() => set({ screen: 'enroll' })} label="Enroll a new voice" />
+        <Rule t={t} dim />
+        <HomeLink t={t} onClick={() => set({ screen: 'settings' })} label="Settings" />
 
         <div style={{ height: 24 }} />
         <PrivacyNote t={t}>
@@ -353,8 +354,8 @@ function StartScreen({ t, state, set }) {
         </Card>
 
         <div style={{ height: 28 }} />
-        <Btn t={t} full onClick={() => set({ screen: 'live', topic, elapsed: 0, isLive: true })}>
-          Start listening
+        <Btn t={t} full onClick={() => set({ screen: 'attendance', topic })}>
+          Next: who's here? →
         </Btn>
         <div style={{ height: 14 }} />
         <PrivacyNote t={t}>
@@ -372,14 +373,16 @@ function StartScreen({ t, state, set }) {
 function LiveScreen({ t, state, set }) {
   const [elapsed, setElapsed] = useState(state.elapsed || 0);
   const [speakerIdx, setSpeakerIdx] = useState(2);
-  // Simulated English/non-English fraction over time.
   const [pulse, setPulse] = useState(0.78);
+  const [paused, setPaused] = useState(false);
+  const [topicOpen, setTopicOpen] = useState(false);
+  const [topic, setTopic] = useState(state.topic || 'Daily life');
   const drift = pulse < 0.45;
 
   useEffect(() => {
+    if (paused) return;
     const id = setInterval(() => {
       setElapsed((e) => e + 1);
-      // Rotate speaker every ~6s; jitter pulse smoothly.
       setSpeakerIdx((i) => Math.random() < 0.16 ? Math.floor(Math.random() * 6) : i);
       setPulse((p) => {
         const target = 0.62 + Math.sin(Date.now() / 4500) * 0.22;
@@ -387,7 +390,7 @@ function LiveScreen({ t, state, set }) {
       });
     }, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [paused]);
 
   const speaker = BOLO_COHORT[speakerIdx];
   const ringColor = drift ? t.warn : t.accent;
@@ -406,20 +409,33 @@ function LiveScreen({ t, state, set }) {
         position: 'relative', zIndex: 1, padding: '24px 28px 24px',
         display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box',
       }}>
-        {/* Top — topic + breathing dot + elapsed */}
+        {/* Top — topic (tap to switch) + breathing dot + elapsed */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{
-              width: 8, height: 8, borderRadius: '50%', background: t.rec,
-              animation: 'bolo-breathe 1.8s ease-in-out infinite', display: 'inline-block',
+              width: 8, height: 8, borderRadius: '50%', background: paused ? t.muted : t.rec,
+              animation: paused ? 'none' : 'bolo-breathe 1.8s ease-in-out infinite', display: 'inline-block',
             }} />
-            <span style={{ fontFamily: t.fontMono, fontSize: 11, letterSpacing: 1.5, color: t.fgSoft, textTransform: 'uppercase' }}>
-              Mic on · {state.topic}
-            </span>
+            <button onClick={() => setTopicOpen(true)} style={{
+              background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+              fontFamily: t.fontMono, fontSize: 11, letterSpacing: 1.5, color: t.fgSoft, textTransform: 'uppercase',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}>
+              <span>{paused ? 'Paused' : 'Mic on'} · {topic}</span>
+              <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M1.5 3 L4.5 6 L7.5 3" />
+              </svg>
+            </button>
           </div>
-          <span style={{ fontFamily: t.fontMono, fontSize: 13, color: t.muted }}>
-            {fmt(elapsed)}
-          </span>
+          <button onClick={() => setPaused((p) => !p)} style={{
+            background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 10px',
+            borderRadius: 100, boxShadow: `inset 0 0 0 1px ${t.line}`,
+            fontFamily: t.fontMono, fontSize: 12, color: t.fg, letterSpacing: 0.3,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}>
+            {paused ? '▶' : 'II'}
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(elapsed)}</span>
+          </button>
         </div>
 
         {/* Big elapsed numeral */}
@@ -466,7 +482,7 @@ function LiveScreen({ t, state, set }) {
         </div>
 
         {/* End button */}
-        <Btn t={t} full danger onClick={() => set({ screen: 'summary', elapsed, isLive: false })}>
+        <Btn t={t} full danger onClick={() => set({ screen: 'summary', elapsed, isLive: false, topic })}>
           End session
         </Btn>
         <div style={{ height: 8 }} />
@@ -474,6 +490,19 @@ function LiveScreen({ t, state, set }) {
           No audio is being saved
         </div>
       </div>
+
+      {paused && (
+        <PauseOverlay t={t}
+          onResume={() => setPaused(false)}
+          onEnd={() => set({ screen: 'summary', elapsed, isLive: false, topic })}
+        />
+      )}
+      {topicOpen && (
+        <TopicSwitchSheet t={t} current={topic}
+          onPick={(tp) => { setTopic(tp); setTopicOpen(false); }}
+          onClose={() => setTopicOpen(false)}
+        />
+      )}
     </FullBody>
   );
 }
@@ -693,6 +722,24 @@ function FullBody({ t, children }) {
 }
 function Pad({ children }) {
   return <div style={{ padding: '20px 24px 32px' }}>{children}</div>;
+}
+
+function HomeLink({ t, onClick, label, hint }) {
+  return (
+    <button onClick={onClick}
+      style={{
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        width: '100%', padding: '14px 0', fontFamily: t.fontBody, color: t.fg, fontSize: 15,
+        textAlign: 'left',
+      }}>
+      <span>{label}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {hint && <span style={{ fontSize: 12, color: t.muted, fontFamily: t.fontMono }}>{hint}</span>}
+        <span style={{ color: t.muted }}>→</span>
+      </span>
+    </button>
+  );
 }
 
 function Wordmark({ t }) {
@@ -963,7 +1010,60 @@ function TrendChart({ t, weekly }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Topic switch sheet — bottom drawer on Live
+// ─────────────────────────────────────────────────────────────
+function TopicSwitchSheet({ t, current, onPick, onClose }) {
+  return (
+    <div onClick={onClose} style={{
+      position: 'absolute', inset: 0, zIndex: 5,
+      background: 'rgba(20,18,12,0.45)',
+      display: 'flex', alignItems: 'flex-end',
+      animation: 'bolo-fade-in .2s ease both',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: t.surface, width: '100%',
+        borderRadius: `${t.radius}px ${t.radius}px 0 0`,
+        padding: '20px 24px 24px',
+      }}>
+        <div style={{ width: 40, height: 4, background: t.lineStrong, borderRadius: 2, margin: '0 auto 18px' }} />
+        <Caption t={t}>Switch topic mid-session</Caption>
+        <div style={{ height: 4 }} />
+        <div style={{
+          fontFamily: t.fontAccent || t.fontDisplay,
+          fontSize: 22, color: t.fg, fontStyle: 'italic', letterSpacing: -0.3,
+        }}>What are we talking about now?</div>
+        <div style={{ height: 16 }} />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {BOLO_TOPICS.map((tp) => {
+            const on = tp === current;
+            return (
+              <button key={tp} onClick={() => onPick(tp)}
+                style={{
+                  border: 'none', cursor: 'pointer',
+                  padding: '10px 16px', borderRadius: 100,
+                  fontFamily: t.fontBody, fontSize: 14, fontWeight: 500,
+                  background: on ? t.fg : 'transparent',
+                  color: on ? t.bg : t.fg,
+                  boxShadow: on ? 'none' : `inset 0 0 0 1px ${t.line}`,
+                }}>{tp}</button>
+            );
+          })}
+        </div>
+        <div style={{ height: 12 }} />
+        <div style={{ fontSize: 12, color: t.muted, lineHeight: 1.4 }}>
+          The session continues — we'll just tag what's said from here on with the new topic.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   HomeScreen, EnrollScreen, StartScreen, LiveScreen, SummaryScreen, DashboardScreen,
   Btn, Avatar, Card, Wordmark, TopBar, ScreenTitle, Pad, ScrollBody, FullBody,
+  TopicSwitchSheet,
+  // Sub-atoms reused by extras
+  SectionLabel, Caption, BarRow, StudentBar, SecondaryMetric, ToggleRow, PrivacyNote,
+  Delta, Field: null,
 });

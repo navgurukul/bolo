@@ -11,3 +11,6 @@ captures/
 *.apk
 *.aab
 app/schemas/
+keystore.properties
+*.jks
+*.keystore

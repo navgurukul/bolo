@@ -24,8 +24,18 @@ data class Session(
     val startedAt: Long,
     val endedAt: Long?,
     val totalSpeechMs: Long,
-    val englishSpeechMs: Long
+    val englishSpeechMs: Long,
+    val transcript: String = "",
+    val chunksProcessed: Int = 0,
+    val englishWordCount: Int = 0,
+    val meaningfulTokenCount: Int = 0
 ) {
     val englishShare: Float
-        get() = if (totalSpeechMs <= 0L) 0f else englishSpeechMs.toFloat() / totalSpeechMs.toFloat()
+        get() = if (meaningfulTokenCount > 0) {
+            englishWordCount.toFloat() / meaningfulTokenCount.toFloat()
+        } else if (totalSpeechMs <= 0L) {
+            0f
+        } else {
+            englishSpeechMs.toFloat() / totalSpeechMs.toFloat()
+        }
 }

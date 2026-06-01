@@ -165,27 +165,6 @@ fun DashboardScreen(
             }
         }
 
-        item {
-            Spacer(Modifier.height(20.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(BoloPalette.Surface)
-                    .border(1.dp, BoloPalette.Hairline, RoundedCornerShape(14.dp))
-                    .clickable { vm.forgetVoice() }
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
-            ) {
-                Column {
-                    Text("Forget my voice", style = MaterialTheme.typography.titleMedium, color = BoloPalette.MicRed)
-                    Text(
-                        "Deletes ${name}'s voice fingerprint from this phone instantly.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = BoloPalette.InkFaint
-                    )
-                }
-            }
-        }
         item { Spacer(Modifier.height(40.dp)) }
     }
 }

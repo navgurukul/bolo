@@ -9,6 +9,7 @@ import co.bolo.app.data.model.Cohort
 import co.bolo.app.data.model.Session
 import co.bolo.app.data.model.SpeakerStat
 import co.bolo.app.data.model.Student
+import co.bolo.app.data.model.TranscriptChunk
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -19,14 +20,23 @@ interface CohortDao {
     @Query("SELECT * FROM cohorts WHERE id = :id")
     suspend fun byId(id: String): Cohort?
 
+    @Query("SELECT COUNT(*) FROM students WHERE cohortId = :cohortId")
+    suspend fun studentCount(cohortId: String): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(cohort: Cohort)
+
+    @Query("DELETE FROM cohorts WHERE id = :id")
+    suspend fun delete(id: String)
 }
 
 @Dao
 interface StudentDao {
     @Query("SELECT * FROM students WHERE cohortId = :cohortId ORDER BY displayName")
     fun observeByCohort(cohortId: String): Flow<List<Student>>
+
+    @Query("SELECT * FROM students WHERE cohortId = :cohortId ORDER BY displayName")
+    suspend fun byCohort(cohortId: String): List<Student>
 
     @Query("SELECT * FROM students WHERE id = :id")
     suspend fun byId(id: String): Student?
@@ -37,8 +47,8 @@ interface StudentDao {
     @Update
     suspend fun update(student: Student)
 
-    @Query("UPDATE students SET voiceEmbedding = NULL, enrolledAt = NULL WHERE id = :id")
-    suspend fun forgetVoice(id: String)
+    @Query("DELETE FROM students WHERE id = :id")
+    suspend fun delete(id: String)
 }
 
 @Dao
@@ -69,4 +79,16 @@ interface SpeakerStatDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(stats: List<SpeakerStat>)
+}
+
+@Dao
+interface TranscriptChunkDao {
+    @Query("SELECT * FROM transcript_chunks WHERE sessionId = :sessionId ORDER BY sequence ASC")
+    fun observeBySession(sessionId: String): Flow<List<TranscriptChunk>>
+
+    @Query("SELECT * FROM transcript_chunks WHERE sessionId = :sessionId ORDER BY sequence ASC")
+    suspend fun bySession(sessionId: String): List<TranscriptChunk>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(chunks: List<TranscriptChunk>)
 }

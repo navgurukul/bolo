@@ -1,5 +1,9 @@
 package co.bolo.app.ui.session
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,45 +19,87 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.SolidColor
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.bolo.app.data.repo.RecognizerStatus
+import co.bolo.app.ui.components.BoloAvatar
+import co.bolo.app.ui.components.BoloCaption
+import co.bolo.app.ui.components.BoloItalicAccent
+import co.bolo.app.ui.components.BoloQuietButton
+import co.bolo.app.ui.components.BoloSolidButton
 import co.bolo.app.ui.components.BreathingRedDot
 import co.bolo.app.ui.components.EnglishRing
 import co.bolo.app.ui.components.TopicPill
 import co.bolo.app.ui.theme.BoloPalette
+import co.bolo.app.ui.theme.MonoData
 import co.bolo.app.util.Format
 import kotlinx.coroutines.launch
 
 @Composable
 fun SessionScreen(
-    cohortId: String,
     onEnd: (sessionId: String) -> Unit,
     onCancel: () -> Unit,
     vm: SessionViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        vm.onPermissionResult(results.values.all { it })
+    }
+
+    LaunchedEffect(Unit) {
+        val allGranted = permissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PermissionChecker.PERMISSION_GRANTED
+        }
+        vm.onPermissionResult(allGranted)
+    }
+
     when (state.phase) {
-        SessionUiState.Phase.PickingTopic -> TopicPicker(state, vm, onCancel)
+        SessionUiState.Phase.PickingTopic -> TopicPicker(state, vm, onCancel) {
+            launcher.launch(permissions.toTypedArray())
+        }
         SessionUiState.Phase.Running, SessionUiState.Phase.Ending -> Recording(state, vm, onEnd)
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TopicPicker(state: SessionUiState, vm: SessionViewModel, onCancel: () -> Unit) {
+private fun TopicPicker(
+    state: SessionUiState,
+    vm: SessionViewModel,
+    onCancel: () -> Unit,
+    onRequestPermission: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -116,24 +162,16 @@ private fun TopicPicker(state: SessionUiState, vm: SessionViewModel, onCancel: (
 
         Spacer(Modifier.height(40.dp))
         val canStart = vm.resolvedTopic().isNotBlank() && state.students.isNotEmpty()
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(if (canStart) BoloPalette.Ink else BoloPalette.SurfaceMuted)
-                .clickable(enabled = canStart) { vm.start() }
-                .padding(vertical = 18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "Start listening",
-                color = if (canStart) BoloPalette.Bg else BoloPalette.InkFaint,
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
+        BoloSolidButton(
+            label = if (state.isPermissionGranted) "Start listening" else "Grant mic permission",
+            enabled = canStart,
+            onClick = {
+                if (state.isPermissionGranted) vm.start() else onRequestPermission()
+            }
+        )
         Spacer(Modifier.height(12.dp))
         Text(
-            "No audio leaves this phone. The mic light stays on whenever we're listening.",
+            "Speech is sent to Google for transcription. Bolo keeps only the text. The mic light stays on whenever we're listening.",
             style = MaterialTheme.typography.bodySmall,
             color = BoloPalette.InkFaint,
             textAlign = TextAlign.Center,
@@ -142,82 +180,272 @@ private fun TopicPicker(state: SessionUiState, vm: SessionViewModel, onCancel: (
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Recording(state: SessionUiState, vm: SessionViewModel, onEnd: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    val currentSpeaker = state.students.getOrNull(state.currentSpeakerIdx)?.displayName ?: "—"
+    val paused = state.paused
+    val topicLabel = state.topic.ifBlank { "Free talk" }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BoloPalette.Bg)
-            .padding(PaddingValues(horizontal = 22.dp, vertical = 28.dp)),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(state.topic, style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BreathingRedDot(active = true, size = 10.dp)
-                Spacer(Modifier.padding(start = 8.dp))
-                Text("REC", style = MaterialTheme.typography.labelSmall, color = BoloPalette.MicRed)
-            }
-        }
-        Spacer(Modifier.height(40.dp))
-
-        EnglishRing(share = state.englishShareRolling, drift = state.drifting, diameter = 240.dp) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    Format.clockMs(state.elapsedMs),
-                    style = MaterialTheme.typography.displayMedium,
-                    color = BoloPalette.Ink
-                )
-                Text(
-                    "${(state.englishShareRolling * 100).toInt()}% English now",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = BoloPalette.SageDeep
-                )
-            }
-        }
-
-        Spacer(Modifier.height(32.dp))
-        Text("NOW SPEAKING", style = MaterialTheme.typography.labelSmall, color = BoloPalette.InkFaint)
-        Spacer(Modifier.height(6.dp))
-        Text(currentSpeaker, style = MaterialTheme.typography.headlineMedium, color = BoloPalette.Ink)
-        if (state.drifting) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Group has drifted — try a quick English question.",
-                style = MaterialTheme.typography.bodySmall,
-                color = BoloPalette.Amber
-            )
-        }
-
-        Spacer(Modifier.height(40.dp))
-        Box(
+    Box(modifier = Modifier.fillMaxSize().background(BoloPalette.Bg)) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(BoloPalette.SurfaceMuted)
-                .clickable {
+                .fillMaxSize()
+                .padding(PaddingValues(horizontal = 22.dp, vertical = 28.dp)),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            RecognizerStatusBanner(state.recognizerStatus)
+            // Top row: breathing dot + MIC ON · topic on left; pause + elapsed on right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (paused) BoloPalette.InkFaint else BoloPalette.MicRed)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "${if (paused) "PAUSED" else "MIC ON"} · ${topicLabel.uppercase()}",
+                        color = BoloPalette.InkMuted,
+                        fontFamily = MonoData,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.5.sp
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .border(1.dp, BoloPalette.Hairline, RoundedCornerShape(999.dp))
+                        .clickable { vm.togglePause() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (paused) "▶" else "II",
+                        color = BoloPalette.Ink,
+                        fontFamily = MonoData,
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        Format.clockMs(state.elapsedMs),
+                        color = BoloPalette.Ink,
+                        fontFamily = MonoData,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+            Spacer(Modifier.height(40.dp))
+
+            EnglishRing(share = state.englishShareRolling, drift = false, diameter = 240.dp) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        Format.clockMs(state.elapsedMs),
+                        style = MaterialTheme.typography.displayMedium,
+                        color = BoloPalette.Ink
+                    )
+                    Text(
+                        "${(state.englishShareRolling * 100).toInt()}% English usage",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = BoloPalette.SageDeep
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(28.dp))
+            Text(
+                "TAP ACTIVE SPEAKER TO TRACK TIME", 
+                style = MaterialTheme.typography.labelSmall, 
+                color = BoloPalette.InkFaint,
+                fontFamily = MonoData,
+                letterSpacing = 1.2.sp
+            )
+            Spacer(Modifier.height(12.dp))
+            
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // General Group option
+                val isGeneralActive = state.activeSpeakerId == null
+                val generalBg = if (isGeneralActive) BoloPalette.SageSoft else BoloPalette.Surface
+                val generalBorder = if (isGeneralActive) BoloPalette.Sage else BoloPalette.Hairline
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(generalBg)
+                        .border(1.dp, generalBorder, RoundedCornerShape(999.dp))
+                        .clickable { vm.selectActiveSpeaker(null) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(BoloPalette.SurfaceMuted)
+                            .border(1.dp, if (isGeneralActive) BoloPalette.Sage else BoloPalette.Hairline, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "👥",
+                            fontSize = 11.sp
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Group",
+                        color = BoloPalette.Ink,
+                        fontWeight = if (isGeneralActive) FontWeight.SemiBold else FontWeight.Normal,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                // Student options
+                state.students.forEach { student ->
+                    val isActive = state.activeSpeakerId == student.id
+                    val bg = if (isActive) BoloPalette.SageSoft else BoloPalette.Surface
+                    val border = if (isActive) BoloPalette.Sage else BoloPalette.Hairline
+                    val speakingMs = state.studentSpeechMs[student.id] ?: 0L
+                    
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(bg)
+                            .border(1.dp, border, RoundedCornerShape(999.dp))
+                            .clickable { vm.selectActiveSpeaker(student.id) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        BoloAvatar(
+                            name = student.displayName,
+                            size = 24.dp,
+                            active = isActive
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            student.displayName,
+                            color = BoloPalette.Ink,
+                            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (speakingMs > 0L) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "(${Format.clockMs(speakingMs)})",
+                                color = if (isActive) BoloPalette.SageDeep else BoloPalette.InkFaint,
+                                fontFamily = MonoData,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            BoloSolidButton(
+                label = "End session",
+                danger = true,
+                onClick = {
                     scope.launch {
                         val id = vm.end()
                         onEnd(id)
                     }
                 }
-                .padding(vertical = 18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("End session", style = MaterialTheme.typography.titleMedium, color = BoloPalette.Ink)
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Only the English percentage is saved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = BoloPalette.InkFaint
+            )
         }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "No audio is being saved. Only speaking time per voice.",
-            style = MaterialTheme.typography.bodySmall,
-            color = BoloPalette.InkFaint
-        )
+
+        if (paused) {
+            PauseOverlay(
+                onResume = { vm.togglePause() },
+                onEnd = {
+                    scope.launch {
+                        val id = vm.end()
+                        onEnd(id)
+                    }
+                }
+            )
+        }
     }
 }
+
+@Composable
+private fun RecognizerStatusBanner(status: RecognizerStatus) {
+    if (status == RecognizerStatus.Ok) return
+    val message = when (status) {
+        RecognizerStatus.NoInternet ->
+            "No internet — speech can't be transcribed right now. Counts will resume when connection returns."
+        RecognizerStatus.ServerError ->
+            "Google's speech service is unavailable. Counts will resume when it's back."
+        RecognizerStatus.Overloaded ->
+            "Speech service is overloaded. Try ending and starting a fresh session."
+        RecognizerStatus.Ok -> return
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(BoloPalette.MicRed.copy(alpha = 0.12f))
+            .border(1.dp, BoloPalette.MicRed.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Text(
+            message,
+            color = BoloPalette.MicRed,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
+// ─────────────────────────────────────────────────────────────
+// PauseOverlay — dimmed scrim + centred card with italic "Paused."
+// ─────────────────────────────────────────────────────────────
+@Composable
+fun PauseOverlay(onResume: () -> Unit, onEnd: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BoloPalette.Ink.copy(alpha = 0.55f))
+            .clickable(enabled = false) { },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(280.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(BoloPalette.Surface)
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            BoloItalicAccent("Paused.", fontSize = 26)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "The mic is muted. Nothing is being counted right now.",
+                color = BoloPalette.InkMuted,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(22.dp))
+            BoloSolidButton("Resume listening", onClick = onResume)
+            Spacer(Modifier.height(8.dp))
+            BoloQuietButton("End the session", onClick = onEnd)
+        }
+    }
+}
+

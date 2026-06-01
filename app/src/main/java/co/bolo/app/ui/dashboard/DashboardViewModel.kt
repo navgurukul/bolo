@@ -91,10 +91,4 @@ class DashboardViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUiState())
 
     fun selectTopic(topic: String?) { selectedTopic.value = topic }
-
-    fun forgetVoice() {
-        viewModelScope.launch {
-            // Phase 2 will wire StudentDao.forgetVoice through a repo method.
-        }
-    }
 }
