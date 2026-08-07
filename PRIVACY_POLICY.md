@@ -1,6 +1,6 @@
 # Bolo — Privacy Policy
 
-_Last updated: 26 May 2026_
+_Last updated: 7 August 2026_
 
 Bolo is an Android application built by Samyarth (a NavGurukul
 initiative) for use in classroom sessions. This policy explains exactly
@@ -23,6 +23,7 @@ are stored on the device.
 | **Per-student English share + speech time** | Local Room database on the device only. | Only the user of the device. |
 | **Cohort name, student names, session topics** | Entered by the facilitator. Local Room database only. | Only the user of the device. |
 | **Voice fingerprints** | Not collected. Bolo does not enrol voices or perform biometric speaker identification. | — |
+| **Language classification** | Runs entirely on the device using a bundled ML Kit language-identification model. No text leaves the device for this step. | Only the user of the device. |
 
 ## What Bolo does **not** do
 
@@ -60,9 +61,7 @@ the operating system.
   notifications** — to keep recognition running with the screen off and
   to show the persistent "Bolo Session Active" notification while a
   session is live.
-- **Install packages** — Bolo can install in-app updates fetched from
-  GitHub Releases when a newer build is published. The user always sees
-  the system installer prompt.
+- **Vibrate** — short haptic feedback on session controls.
 
 ## How to delete your data
 
@@ -84,7 +83,7 @@ collect data from them.
 ## Contact
 
 For questions about this policy, contact
-**souvikdeb2612@gmail.com**.
+**souvik@navgurukul.org**.
 
 ## Changes
 

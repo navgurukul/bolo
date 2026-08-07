@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bolo — Privacy Policy</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 5rem;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  h1 { font-size: 1.9rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.25rem; }
+  .updated { color: #666; font-size: .9rem; margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid #ddd; padding: .55rem .7rem; text-align: left; vertical-align: top; font-size: .93rem; }
+  th { background: #f5f5f5; }
+  a { color: #0b5cad; }
+  code { background: #f2f2f2; padding: .1rem .3rem; border-radius: 3px; font-size: .9em; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #ddd; color: #666; font-size: .88rem; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e6e6; background: #121212; }
+    th { background: #1e1e1e; }
+    th, td { border-color: #333; }
+    a { color: #6cb2ff; }
+    code { background: #1e1e1e; }
+    .updated, footer { color: #999; }
+    footer { border-top-color: #333; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Bolo — Privacy Policy</h1>
+<p class="updated">Last updated: 7 August 2026</p>
+
+<p>Bolo (<code>org.samyarth.bolo</code>) is an Android application built by Samyarth, a
+NavGurukul initiative, for use in classroom sessions. This policy explains exactly what
+data Bolo touches and where it goes.</p>
+
+<h2>What Bolo does</h2>
+<p>During a session, Bolo listens via the device microphone, passes the audio to the
+Android system speech recognition service for transcription, and analyses the resulting
+text to estimate how much English versus other languages was spoken. The transcript text
+and per-student English share are stored on the device.</p>
+
+<h2>What data Bolo handles</h2>
+<table>
+  <thead>
+    <tr><th>Data</th><th>Where it lives</th><th>Who can see it</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Microphone audio</strong></td>
+      <td>Streamed to the Android system speech recognition service. <strong>Bolo itself does not store the raw audio.</strong></td>
+      <td>Google Speech Services, per Google's privacy policy.</td>
+    </tr>
+    <tr>
+      <td><strong>Transcript text</strong></td>
+      <td>Local database on the device only.</td>
+      <td>Only the user of the device.</td>
+    </tr>
+    <tr>
+      <td><strong>Per-student English share and speech time</strong></td>
+      <td>Local database on the device only.</td>
+      <td>Only the user of the device.</td>
+    </tr>
+    <tr>
+      <td><strong>Cohort name, student names, session topics</strong></td>
+      <td>Entered by the facilitator. Local database only.</td>
+      <td>Only the user of the device.</td>
+    </tr>
+    <tr>
+      <td><strong>Language classification</strong></td>
+      <td>Runs entirely on the device using a bundled ML Kit language-identification model. No text leaves the device for this step.</td>
+      <td>Only the user of the device.</td>
+    </tr>
+    <tr>
+      <td><strong>Voice fingerprints</strong></td>
+      <td>Not collected. Bolo does not enrol voices or perform biometric speaker identification.</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>What Bolo does not do</h2>
+<ul>
+  <li>Bolo does not record or save audio files.</li>
+  <li>Bolo does not send any data to Samyarth, NavGurukul, or any server controlled by the developers.</li>
+  <li>Bolo does not show ads, run analytics, or use third-party trackers.</li>
+  <li>Bolo does not require an account or login.</li>
+</ul>
+
+<h2>Third-party processor</h2>
+<p>Audio is sent to <strong>Google Speech Services</strong>, part of the Android operating
+system, for real-time transcription. Google's handling of that audio is governed by:</p>
+<ul>
+  <li><a href="https://policies.google.com/privacy">Google Privacy Policy</a></li>
+  <li><a href="https://support.google.com/websearch/answer/6030020">Speech Services data handling</a></li>
+</ul>
+<p>The transcript text Google returns is kept by Bolo on the device. The underlying audio is
+handled by Google according to their own retention policies and the user's Google account
+settings.</p>
+
+<h2>Network use</h2>
+<p>Bolo requires an internet connection to transcribe speech. Bolo makes no network requests
+of its own — only the system speech recogniser uses the network, over a connection encrypted
+by the operating system.</p>
+
+<h2>Permissions Bolo requests</h2>
+<ul>
+  <li><strong>Microphone</strong> — to capture speech during sessions.</li>
+  <li><strong>Internet, Network state</strong> — used by the system speech recogniser.</li>
+  <li><strong>Foreground service, Foreground service microphone, Post notifications</strong> —
+      to keep recognition running with the screen off and to show the persistent
+      "Bolo Session Active" notification while a session is live.</li>
+  <li><strong>Vibrate</strong> — short haptic feedback on session controls.</li>
+</ul>
+
+<h2>How to delete your data</h2>
+<p>All Bolo data is stored on the device. To delete it:</p>
+<ol>
+  <li>Open Bolo.</li>
+  <li>Go to <strong>Settings → Privacy → Clear all data &amp; restart setup</strong>.</li>
+  <li>Confirm.</li>
+</ol>
+<p>This wipes every cohort, student, session, transcript, and the consent flag from the
+device. Uninstalling Bolo has the same effect.</p>
+
+<h2>Children</h2>
+<p>Bolo is intended for use by adult facilitators with adult learners (18+). Bolo is not
+directed to children under 13 and does not knowingly collect data from them.</p>
+
+<h2>Contact</h2>
+<p>For questions about this policy, contact <strong>souvik@navgurukul.org</strong>.</p>
+
+<h2>Changes</h2>
+<p>If we ever change what data Bolo handles, this page will be updated and a new
+"Last updated" date posted above. Significant changes will also be flagged in the app on
+next launch.</p>
+
+<footer>
+  Bolo is open source at
+  <a href="https://github.com/navgurukul/bolo">github.com/navgurukul/bolo</a>.
+</footer>
+
+</body>
+</html>
