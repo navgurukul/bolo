@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!-- Bolo writes the freshly-downloaded update APK into the app's
-         external-files Downloads dir; the FileProvider needs read access
-         so the system installer can open it. -->
-    <external-files-path
-        name="updates"
-        path="updates/" />
-</paths>

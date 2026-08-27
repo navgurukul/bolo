@@ -38,28 +38,15 @@ import co.bolo.app.ui.components.BoloTopBar
 import co.bolo.app.ui.components.Hairline
 import co.bolo.app.ui.theme.BoloPalette
 import co.bolo.app.ui.theme.MonoData
-import co.bolo.app.update.UpdateAvailableDialog
-import co.bolo.app.update.UpdateState
-import co.bolo.app.update.UpdateViewModel
-
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onManageStudents: () -> Unit,
     onDataCleared: () -> Unit,
-    vm: SettingsViewModel = hiltViewModel(),
-    updateVm: UpdateViewModel = hiltViewModel()
+    vm: SettingsViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val updateState by updateVm.state.collectAsStateWithLifecycle()
     var clearDialogOpen by remember { mutableStateOf(false) }
-    val updateRowValue = when (val s = updateState) {
-        is UpdateState.Checking -> "Checking…"
-        is UpdateState.UpToDate -> "You're on the latest"
-        is UpdateState.Available -> "v${s.versionName} available"
-        is UpdateState.Error -> "Couldn't check"
-        UpdateState.Idle -> ""
-    }
 
     Column(
         modifier = Modifier
@@ -99,12 +86,6 @@ fun SettingsScreen(
             value = "${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}",
             mono = true
         )
-        SettingRow(
-            label = "Check for updates",
-            value = updateRowValue,
-            chevron = true,
-            onClick = { updateVm.checkManually() }
-        )
 
         Spacer(Modifier.height(28.dp))
         Text(
@@ -128,13 +109,7 @@ fun SettingsScreen(
         )
     }
 
-    (updateState as? UpdateState.Available)?.let { available ->
-        UpdateAvailableDialog(
-            available = available,
-            onInstall = { updateVm.startInstall() },
-            onDismiss = { updateVm.dismiss() }
-        )
-    }
+
 }
 
 @Composable

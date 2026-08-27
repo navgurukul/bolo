@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- In-app updater needs to launch the system installer on the
          downloaded APK. The user is still prompted to confirm. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" /> -->
 
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
 
@@ -38,7 +38,7 @@
 
         <!-- FileProvider authority used by the in-app updater to hand the
              downloaded APK to the system installer. -->
-        <provider
+        <!-- <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
@@ -46,7 +46,7 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
-        </provider>
+        </provider> -->
 
         <activity
             android:name=".MainActivity"
