@@ -26,8 +26,8 @@ android {
         applicationId = "co.bolo.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.1.8-updater"
+        versionCode = 10
+        versionName = "0.1.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         ksp {
@@ -112,6 +112,10 @@ dependencies {
     
     // Real language classification
     implementation(libs.mlkit.language.id)
+
+    // Google Play In-App Updates
+    implementation(libs.play.app.update)
+    implementation(libs.play.app.update.ktx)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
